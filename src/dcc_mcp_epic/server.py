@@ -110,6 +110,34 @@ def epic_fab_download_plan(
     ).as_dict()
 
 
+def epic_fab_download_request(
+    asset_id: str,
+    project_path: str,
+    allowed_root: str,
+    hook_manifest: str,
+    expected_price: float = 0,
+    owned: bool = False,
+    format: str = "unreal-engine",
+    quality: str = "",
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch a policy-checked Fab download request to a user-owned hook."""
+
+    return _service.fab_download_request(
+        asset_id,
+        project_path,
+        allowed_root,
+        hook_manifest,
+        expected_price=expected_price,
+        owned=owned,
+        format=format,
+        quality=quality,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 def epic_fab_import_cached_asset(
     asset_id: str,
     project_path: str,
@@ -262,6 +290,7 @@ if FastMCP is not None:
         epic_fab_library_list,
         epic_fab_asset_inspect,
         epic_fab_download_plan,
+        epic_fab_download_request,
         epic_fab_import_cached_asset,
         epic_fab_import_all_cached,
         epic_fab_project_inventory,

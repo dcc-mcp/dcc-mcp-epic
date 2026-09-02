@@ -37,6 +37,12 @@ The bridge must reject arbitrary command lines, URLs, PowerShell, credentials,
 purchase actions, and manifest writes. Long operations return a job ID and are
 verified by fresh filesystem/asset-registry evidence before completion.
 
+`epic_fab_download_request` is the typed hook entry for a user-owned download
+bridge. It rejects non-zero prices and unverified ownership, sends only the
+asset/project/format/quality payload, defaults to dry-run, and reports the
+request as incomplete until the local Fab index and project inventory are
+re-read.
+
 ## Self-owned hook bridge
 
 For capabilities not exposed by the Launcher, a user-owned bridge can register

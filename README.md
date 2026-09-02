@@ -22,6 +22,9 @@ no generic UI automation fallback.
 - Generic CUA fallback: disabled.
 - Self-owned hook bridge: supported through the fixed `epic.hook.v1` manifest
   contract, with dry-run and explicit confirmation as defaults.
+- Typed Fab download request: policy-checks a free, owned asset and dispatches
+  a fixed payload to a declared user-owned hook; completion still needs fresh
+  library/project evidence.
 - Runtime selection: `runtime-doctor` prefers a verified DCC-MCP sidecar when a
   compatible Python/MCP environment exists and otherwise selects the shared
   PyOxidizer bundle. Unreal's embedded Python is never reused.
@@ -45,6 +48,9 @@ uv run dcc-mcp-epic-cli project-verify P:\game-test\ue-arpg\RiftKidsARPG.uprojec
 uv run dcc-mcp-epic-cli engine-verify
 uv run dcc-mcp-epic-cli fab-library
 uv run dcc-mcp-epic-cli fab-asset-inspect b8ff3ab4-0e81-4335-bbf0-fea15f6fcdfc
+uv run dcc-mcp-epic-cli fab-download-request <asset-id> P:\game-test\ue-arpg `
+  --allowed-root P:\game-test\ue-arpg --hook-manifest C:\path\hook.json `
+  --owned
 uv run dcc-mcp-epic-cli fab-import-all-cached P:\game-test\ue-arpg `
   --allowed-root P:\game-test\ue-arpg
 uv run dcc-mcp-epic-cli fab-project-inventory P:\game-test\ue-arpg `

@@ -161,3 +161,80 @@ class EpicService:
             confirmed=confirmed,
             dry_run=dry_run,
         )
+
+    def fab_download_request(
+        self,
+        asset_id: str,
+        project_path: Union[str, Path],
+        allowed_root: Union[str, Path],
+        hook_manifest: Union[str, Path],
+        *,
+        expected_price: Union[int, float] = 0,
+        owned: bool = False,
+        format: str = "unreal-engine",
+        quality: str = "",
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Invoke a declared user-owned Fab download hook after policy checks."""
+
+        plan = self.fab.plan_download(
+            asset_id,
+            project_path,
+            allowed_root,
+            expected_price,
+            owned,
+        )
+        if expected_price != 0 or not owned:
+            return plan
+        if not isinstance(format, str) or format not in {
+            "unreal-engine",
+            "fbx",
+            "glb",
+            "gltf",
+            "obj",
+            "usd",
+            "usdz",
+        }:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.download",
+                "unsupported Fab download format",
+                {"asset_id": asset_id, "format": format, "side_effects_performed": False},
+            )
+        payload = {
+            "asset_id": asset_id,
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "allowed_root": str(Path(allowed_root).expanduser().resolve()),
+            "expected_price": expected_price,
+            "owned": True,
+            "format": format,
+            "quality": quality,
+        }
+        hook_result = self.hook_invoke(
+            hook_manifest,
+            "fab.download.request",
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+        )
+        details = {
+            "asset_id": asset_id,
+            "project_path": payload["project_path"],
+            "format": format,
+            "quality": quality,
+            "plan": plan.as_dict(),
+            "hook": hook_result.as_dict(),
+            "side_effects_performed": hook_result.details.get(
+                "side_effects_performed", False
+            ),
+            "verification_required": (
+                "re-read Epic's local Fab index and project import inventory after the hook"
+            ),
+        }
+        return OperationResult(
+            hook_result.state,
+            "fab.download",
+            "Fab download hook request processed; completion requires fresh evidence",
+            details,
+        )

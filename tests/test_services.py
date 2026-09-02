@@ -175,3 +175,58 @@ def test_project_import_inventory_verifies_manifest_hashes(tmp_path):
     inventory = service.fab.project_import_inventory(project, tmp_path)
     assert inventory["all_valid"] is False
     assert inventory["assets"][0]["mismatched_files"] == ["Meshes/hero.uasset"]
+
+
+def test_fab_download_request_dispatches_only_after_free_owned_policy(tmp_path):
+    import hashlib
+    import sys
+
+    hook = tmp_path / "hook.py"
+    hook.write_text(
+        "import json,sys; print(json.dumps({'received': json.load(sys.stdin)['payload']}))",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "hook.json"
+    digest = hashlib.sha256((__import__("pathlib").Path(sys.executable)).read_bytes()).hexdigest()
+    manifest.write_text(
+        json.dumps(
+            {
+                "protocol": "epic.hook.v1",
+                "name": "download-hook",
+                "version": "1.0.0",
+                "command": [sys.executable, str(hook)],
+                "operations": ["fab.download.request"],
+                "requires_confirmation": ["fab.download.request"],
+                "sha256": digest,
+            }
+        ),
+        encoding="utf-8",
+    )
+    project = tmp_path / "project"
+    (project / "Content").mkdir(parents=True)
+    service = EpicService()
+    blocked = service.fab_download_request(
+        "asset-1", project, tmp_path, manifest, owned=False
+    )
+    assert blocked.state is CapabilityState.HUMAN_REQUIRED
+    dry_run = service.fab_download_request(
+        "asset-1", project, tmp_path, manifest, owned=True
+    )
+    assert dry_run.state is CapabilityState.HUMAN_REQUIRED
+    dry_run = service.fab_download_request(
+        "asset-1", project, tmp_path, manifest, owned=True, confirmed=True
+    )
+    assert dry_run.state is CapabilityState.READ_ONLY
+    assert dry_run.details["hook"]["details"]["side_effects_performed"] is False
+    executed = service.fab_download_request(
+        "asset-1",
+        project,
+        tmp_path,
+        manifest,
+        owned=True,
+        confirmed=True,
+        dry_run=False,
+    )
+    assert executed.state is CapabilityState.AVAILABLE
+    assert executed.details["side_effects_performed"] is True
+    assert executed.details["hook"]["details"]["response"]["received"]["format"] == "unreal-engine"

@@ -53,6 +53,17 @@ def build_parser() -> argparse.ArgumentParser:
     fab.add_argument("--allowed-root", required=True)
     fab.add_argument("--expected-price", type=float, default=0)
     fab.add_argument("--owned", action="store_true")
+    fab_request = sub.add_parser("fab-download-request")
+    fab_request.add_argument("asset_id")
+    fab_request.add_argument("project_path")
+    fab_request.add_argument("--allowed-root", required=True)
+    fab_request.add_argument("--hook-manifest", required=True)
+    fab_request.add_argument("--expected-price", type=float, default=0)
+    fab_request.add_argument("--owned", action="store_true")
+    fab_request.add_argument("--format", default="unreal-engine")
+    fab_request.add_argument("--quality", default="")
+    fab_request.add_argument("--confirmed", action="store_true")
+    fab_request.add_argument("--execute", action="store_true")
     fab_asset = sub.add_parser("fab-asset-inspect")
     fab_asset.add_argument("asset_id")
     fab_asset.add_argument("--database", default=None)
@@ -145,6 +156,21 @@ def main(argv: Optional[List[str]] = None) -> int:
                 args.allowed_root,
                 args.expected_price,
                 args.owned,
+            ).as_dict()
+        )
+    elif args.command == "fab-download-request":
+        _dump(
+            service.fab_download_request(
+                args.asset_id,
+                args.project_path,
+                args.allowed_root,
+                args.hook_manifest,
+                expected_price=args.expected_price,
+                owned=args.owned,
+                format=args.format,
+                quality=args.quality,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
             ).as_dict()
         )
     elif args.command == "fab-asset-inspect":
