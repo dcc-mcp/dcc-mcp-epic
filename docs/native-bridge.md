@@ -12,6 +12,15 @@ Initial allowlist:
 - `engine.verify.request`
 - `fab.download.request`
 - `fab.export.request`
+- `fab.import_cached.request`
+- `fab.import_all_cached.request`
+
+The adapter also implements cached import locally. This path is intentionally
+separate from the native bridge: it reads Epic's local library index, requires
+an acquisition row and an existing cache path, copies only Unreal Content
+files, and writes a provenance manifest under the project. It never edits
+`listings_v1.db` or claims that a cached asset is free; license terms remain
+the user's responsibility.
 
 The bridge must reject arbitrary command lines, URLs, PowerShell, credentials,
 purchase actions, and manifest writes. Long operations return a job ID and are

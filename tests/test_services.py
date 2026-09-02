@@ -59,3 +59,84 @@ def test_local_fab_library_is_read_only(tmp_path):
     assert result["assets"][0]["title"] == "Free Arrow Trail"
     assert result["read_only"] is True
     assert database.read_bytes() == before
+
+
+def test_import_cached_asset_is_dry_run_then_idempotent(tmp_path, monkeypatch):
+    import sqlite3
+
+    cache_root = tmp_path / "VaultCache"
+    cache = cache_root / "ArrowTrailCache"
+    content = cache / "data" / "Content" / "ArrowTrail" / "FX"
+    content.mkdir(parents=True)
+    (content / "NS_ArrowTrail.uasset").write_bytes(b"uasset-data")
+    database = tmp_path / "listings_v1.db"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE local_listing (uid TEXT, title TEXT, category_name TEXT, category_path TEXT)"
+    )
+    connection.execute(
+        "CREATE TABLE download_meta (listing_uid TEXT, format TEXT, quality TEXT, "
+        "path TEXT, cache_size INTEGER)"
+    )
+    connection.execute("CREATE TABLE listing_acquisition (listing_uid TEXT, user_uid TEXT)")
+    connection.execute("INSERT INTO local_listing VALUES ('asset-1', 'Free Arrow Trail', '', '')")
+    connection.execute(
+        "INSERT INTO download_meta VALUES ('asset-1', 'unreal-engine', '', ?, 10)",
+        (str(cache),),
+    )
+    connection.execute("INSERT INTO listing_acquisition VALUES ('asset-1', 'user-1')")
+    connection.commit()
+    connection.close()
+
+    project = tmp_path / "project"
+    (project / "Content").mkdir(parents=True)
+    monkeypatch.setattr(
+        "dcc_mcp_epic.providers.fab.service.DEFAULT_FAB_CACHE_ROOT", cache_root.resolve()
+    )
+    service = EpicService()
+    planned = service.fab.plan_import_cached_asset("asset-1", project, tmp_path, database)
+    assert planned.state is CapabilityState.READ_ONLY
+    assert planned.details["file_count"] == 1
+    assert not (project / "Content" / "Fab").exists()
+
+    imported = service.fab.plan_import_cached_asset(
+        "asset-1", project, tmp_path, database, confirmed=True, dry_run=False
+    )
+    assert imported.state is CapabilityState.AVAILABLE
+    destination = project / "Content" / "Fab" / "Free_Arrow_Trail-asset-1"
+    assert (destination / "ArrowTrail" / "FX" / "NS_ArrowTrail.uasset").is_file()
+    assert (destination / ".dcc-mcp-fab.json").is_file()
+
+    repeated = service.fab.plan_import_cached_asset("asset-1", project, tmp_path, database)
+    assert repeated.state is CapabilityState.AVAILABLE
+    assert repeated.details["already_imported"] is True
+
+
+def test_import_rejects_cache_path_outside_vault(tmp_path):
+    import sqlite3
+
+    cache = tmp_path / "outside"
+    content = cache / "data" / "Content"
+    content.mkdir(parents=True)
+    (content / "Asset.uasset").write_bytes(b"asset")
+    database = tmp_path / "listings_v1.db"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE local_listing (uid TEXT, title TEXT, category_name TEXT, category_path TEXT)"
+    )
+    connection.execute(
+        "CREATE TABLE download_meta (listing_uid TEXT, format TEXT, quality TEXT, "
+        "path TEXT, cache_size INTEGER)"
+    )
+    connection.execute("CREATE TABLE listing_acquisition (listing_uid TEXT, user_uid TEXT)")
+    connection.execute("INSERT INTO local_listing VALUES ('asset-1', 'Asset', '', '')")
+    connection.execute("INSERT INTO download_meta VALUES ('asset-1', '', '', ?, 1)", (str(cache),))
+    connection.execute("INSERT INTO listing_acquisition VALUES ('asset-1', 'user-1')")
+    connection.commit()
+    connection.close()
+    (tmp_path / "project" / "Content").mkdir(parents=True)
+    result = EpicService().fab.plan_import_cached_asset(
+        "asset-1", tmp_path / "project", tmp_path, database
+    )
+    assert result.state is CapabilityState.UNAVAILABLE
+    assert "outside" in result.message

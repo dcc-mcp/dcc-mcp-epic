@@ -16,6 +16,9 @@ no generic UI automation fallback.
   adapter never automates login, CAPTCHA, 2FA, purchase, or license acceptance.
 - Local Fab library index: available, read-only, when Epic's `listings_v1.db`
   exists.
+- Cached Fab import: available for already-owned/downloaded Unreal Content;
+  dry-run, explicit confirmation, VaultCache-root enforcement, no-overwrite
+  behavior, and per-file provenance hashes are built in.
 - Generic CUA fallback: disabled.
 - Self-owned hook bridge: supported through the fixed `epic.hook.v1` manifest
   contract, with dry-run and explicit confirmation as defaults.
@@ -42,6 +45,8 @@ uv run dcc-mcp-epic-cli project-verify P:\game-test\ue-arpg\RiftKidsARPG.uprojec
 uv run dcc-mcp-epic-cli engine-verify
 uv run dcc-mcp-epic-cli fab-library
 uv run dcc-mcp-epic-cli fab-asset-inspect b8ff3ab4-0e81-4335-bbf0-fea15f6fcdfc
+uv run dcc-mcp-epic-cli fab-import-all-cached P:\game-test\ue-arpg `
+  --allowed-root P:\game-test\ue-arpg
 uv run dcc-mcp-epic-cli engine-update-plan 5.5
 uv run python scripts/probe_mcp.py
 ```

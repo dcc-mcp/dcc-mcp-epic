@@ -22,6 +22,8 @@ HOOK_OPERATIONS = frozenset(
         "fab.library.request",
         "fab.download.request",
         "fab.export.request",
+        "fab.import_cached.request",
+        "fab.import_all_cached.request",
         "project.import.request",
     }
 )
@@ -33,6 +35,8 @@ MUTATING_HOOK_OPERATIONS = frozenset(
         "engine.launch.request",
         "fab.download.request",
         "fab.export.request",
+        "fab.import_cached.request",
+        "fab.import_all_cached.request",
         "project.import.request",
     }
 )

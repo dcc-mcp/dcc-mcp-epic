@@ -49,6 +49,20 @@ def build_parser() -> argparse.ArgumentParser:
     fab_asset = sub.add_parser("fab-asset-inspect")
     fab_asset.add_argument("asset_id")
     fab_asset.add_argument("--database", default=None)
+    fab_import = sub.add_parser("fab-import-cached")
+    fab_import.add_argument("asset_id")
+    fab_import.add_argument("project_path")
+    fab_import.add_argument("--allowed-root", required=True)
+    fab_import.add_argument("--database", default=None)
+    fab_import.add_argument("--destination-subdir", default="Fab")
+    fab_import.add_argument("--confirmed", action="store_true")
+    fab_import.add_argument("--execute", action="store_true")
+    fab_import_all = sub.add_parser("fab-import-all-cached")
+    fab_import_all.add_argument("project_path")
+    fab_import_all.add_argument("--allowed-root", required=True)
+    fab_import_all.add_argument("--database", default=None)
+    fab_import_all.add_argument("--confirmed", action="store_true")
+    fab_import_all.add_argument("--execute", action="store_true")
     hook_probe = sub.add_parser("hook-probe")
     hook_probe.add_argument("manifest_path")
     hook_invoke = sub.add_parser("hook-invoke")
@@ -109,6 +123,30 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.command == "fab-asset-inspect":
         database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
         _dump(service.fab.inspect_local_asset(args.asset_id, database))
+    elif args.command == "fab-import-cached":
+        database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
+        _dump(
+            service.fab.plan_import_cached_asset(
+                args.asset_id,
+                args.project_path,
+                args.allowed_root,
+                database,
+                destination_subdir=args.destination_subdir,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "fab-import-all-cached":
+        database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
+        _dump(
+            service.fab.import_all_cached_assets(
+                args.project_path,
+                args.allowed_root,
+                database,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            )
+        )
     elif args.command == "hook-probe":
         _dump(service.hook_probe(args.manifest_path))
     elif args.command == "hook-invoke":

@@ -103,6 +103,54 @@ def epic_fab_download_plan(
     ).as_dict()
 
 
+def epic_fab_import_cached_asset(
+    asset_id: str,
+    project_path: str,
+    allowed_root: str,
+    database_path: Optional[str] = None,
+    destination_subdir: str = "Fab",
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Plan or import one already-owned, downloaded Fab asset into ``Content``."""
+
+    kwargs = {
+        "destination_subdir": destination_subdir,
+        "confirmed": confirmed,
+        "dry_run": dry_run,
+    }
+    if database_path:
+        kwargs["database_path"] = database_path
+    return _service.fab.plan_import_cached_asset(
+        asset_id, project_path, allowed_root, **kwargs
+    ).as_dict()
+
+
+def epic_fab_import_all_cached(
+    project_path: str,
+    allowed_root: str,
+    database_path: Optional[str] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Plan or import every owned/downloaded local Fab Unreal asset."""
+
+    if database_path:
+        return _service.fab.import_all_cached_assets(
+            project_path,
+            allowed_root,
+            database_path,
+            confirmed=confirmed,
+            dry_run=dry_run,
+        )
+    return _service.fab.import_all_cached_assets(
+        project_path,
+        allowed_root,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    )
+
+
 def epic_project_verify(project_path: str, expected_engine: str = "5.5") -> Dict[str, Any]:
     """Verify a UE project association and list declared plugins."""
 
@@ -153,6 +201,8 @@ if FastMCP is not None:
         epic_fab_library_list,
         epic_fab_asset_inspect,
         epic_fab_download_plan,
+        epic_fab_import_cached_asset,
+        epic_fab_import_all_cached,
         epic_project_verify,
         epic_launcher_status,
         epic_hook_probe,
