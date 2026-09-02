@@ -14,6 +14,7 @@ Initial allowlist:
 - `fab.export.request`
 - `fab.import_cached.request`
 - `fab.import_all_cached.request`
+- `fab.launcher_import.request`
 
 The adapter also implements cached import locally. This path is intentionally
 separate from the native bridge: it reads Epic's local library index, requires
@@ -21,6 +22,13 @@ an acquisition row and an existing cache path, copies only Unreal Content
 files, and writes a provenance manifest under the project. It never edits
 `listings_v1.db` or claims that a cached asset is free; license terms remain
 the user's responsibility.
+
+UE 5.5's installed FabLauncher plugin exposes a loopback TCP import endpoint
+on `127.0.0.1:23429` and sends completion status to the Launcher on
+`127.0.0.1:24563`. The typed `fab-launcher-probe`/`fab-launcher-import` tools
+bind the endpoint to an exact UnrealEditor PID, HWND, and executable before
+sending the plugin's JSON payload. They never accept arbitrary URLs, commands,
+or credentials; completion still requires fresh UE asset-registry evidence.
 
 The bridge must reject arbitrary command lines, URLs, PowerShell, credentials,
 purchase actions, and manifest writes. Long operations return a job ID and are

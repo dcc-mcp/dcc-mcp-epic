@@ -47,6 +47,7 @@ uv run dcc-mcp-epic-cli fab-library
 uv run dcc-mcp-epic-cli fab-asset-inspect b8ff3ab4-0e81-4335-bbf0-fea15f6fcdfc
 uv run dcc-mcp-epic-cli fab-import-all-cached P:\game-test\ue-arpg `
   --allowed-root P:\game-test\ue-arpg
+uv run dcc-mcp-epic-cli fab-launcher-probe --editor-pid <UnrealEditorPID>
 uv run dcc-mcp-epic-cli engine-update-plan 5.5
 uv run python scripts/probe_mcp.py
 ```

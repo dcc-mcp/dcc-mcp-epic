@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from .models import LauncherBinding
 from .providers.epic_launcher.manifest import DEFAULT_MANIFEST_ROOT
+from .providers.fab.bridge import DEFAULT_FAB_LAUNCHER_PORT, probe_fab_launcher, send_import_request
 from .providers.fab.service import DEFAULT_FAB_LIBRARY_DB
 from .runtime import runtime_doctor
 from .services import EpicService
@@ -63,6 +64,19 @@ def build_parser() -> argparse.ArgumentParser:
     fab_import_all.add_argument("--database", default=None)
     fab_import_all.add_argument("--confirmed", action="store_true")
     fab_import_all.add_argument("--execute", action="store_true")
+    fab_probe = sub.add_parser("fab-launcher-probe")
+    fab_probe.add_argument("--editor-pid", type=int, required=True)
+    fab_probe.add_argument("--port", type=int, default=DEFAULT_FAB_LAUNCHER_PORT)
+    fab_request = sub.add_parser("fab-launcher-import")
+    fab_request.add_argument("payload", help="JSON file containing an assets list")
+    fab_request.add_argument("--editor-pid", type=int, required=True)
+    fab_request.add_argument("--editor-hwnd", type=int, required=True)
+    fab_request.add_argument("--editor-executable", type=Path, required=True)
+    fab_request.add_argument("--project-path", required=True)
+    fab_request.add_argument("--allowed-root", required=True)
+    fab_request.add_argument("--port", type=int, default=DEFAULT_FAB_LAUNCHER_PORT)
+    fab_request.add_argument("--confirmed", action="store_true")
+    fab_request.add_argument("--execute", action="store_true")
     hook_probe = sub.add_parser("hook-probe")
     hook_probe.add_argument("manifest_path")
     hook_invoke = sub.add_parser("hook-invoke")
@@ -146,6 +160,28 @@ def main(argv: Optional[List[str]] = None) -> int:
                 confirmed=args.confirmed,
                 dry_run=not args.execute,
             )
+        )
+    elif args.command == "fab-launcher-probe":
+        _dump(probe_fab_launcher(args.editor_pid, args.port))
+    elif args.command == "fab-launcher-import":
+        try:
+            payload = json.loads(Path(args.payload).read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError) as exc:
+            raise SystemExit(f"payload must be a readable JSON file: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise SystemExit("payload must be a JSON object containing an assets list")
+        _dump(
+            send_import_request(
+                payload,
+                editor_pid=args.editor_pid,
+                editor_hwnd=args.editor_hwnd,
+                editor_executable=args.editor_executable,
+                project_path=args.project_path,
+                allowed_root=args.allowed_root,
+                port=args.port,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
         )
     elif args.command == "hook-probe":
         _dump(service.hook_probe(args.manifest_path))

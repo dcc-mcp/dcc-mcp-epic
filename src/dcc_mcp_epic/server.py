@@ -10,6 +10,11 @@ except ImportError:  # pragma: no cover - exercised in a minimal Python 3.9 inst
 
 from .models import LauncherBinding
 from .providers.epic_launcher.manifest import DEFAULT_MANIFEST_ROOT
+from .providers.fab.bridge import (
+    DEFAULT_FAB_LAUNCHER_PORT,
+    probe_fab_launcher,
+    send_import_request,
+)
 from .runtime import runtime_doctor
 from .services import EpicService
 
@@ -151,6 +156,40 @@ def epic_fab_import_all_cached(
     )
 
 
+def epic_fab_launcher_probe(
+    editor_pid: int, port: int = DEFAULT_FAB_LAUNCHER_PORT
+) -> Dict[str, Any]:
+    """Probe the UE FabLauncher TCP endpoint without sending data."""
+
+    return probe_fab_launcher(editor_pid, port)
+
+
+def epic_fab_launcher_import_request(
+    payload: Dict[str, Any],
+    editor_pid: int,
+    editor_hwnd: int,
+    editor_executable: str,
+    project_path: str,
+    allowed_root: str,
+    port: int = DEFAULT_FAB_LAUNCHER_PORT,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Validate/send a payload to the exact bound UE FabLauncher process."""
+
+    return send_import_request(
+        payload,
+        editor_pid=editor_pid,
+        editor_hwnd=editor_hwnd,
+        editor_executable=editor_executable,
+        project_path=project_path,
+        allowed_root=allowed_root,
+        port=port,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 def epic_project_verify(project_path: str, expected_engine: str = "5.5") -> Dict[str, Any]:
     """Verify a UE project association and list declared plugins."""
 
@@ -203,6 +242,8 @@ if FastMCP is not None:
         epic_fab_download_plan,
         epic_fab_import_cached_asset,
         epic_fab_import_all_cached,
+        epic_fab_launcher_probe,
+        epic_fab_launcher_import_request,
         epic_project_verify,
         epic_launcher_status,
         epic_hook_probe,

@@ -44,6 +44,8 @@ class FabService:
             "export": CapabilityState.UNAVAILABLE.value,
             "import_cached": "available_if_owned_cached",
             "import_all_cached": "available_if_owned_cached",
+            "launcher_probe": CapabilityState.READ_ONLY.value,
+            "launcher_import": "available_if_bound_ue_editor",
             "reason": "No stable public local Fab automation API has been verified",
             "human_boundary": ["login", "captcha", "2fa", "license_agreement", "purchase"],
         }
