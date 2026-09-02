@@ -43,6 +43,26 @@ def epic_engine_update_plan(
     return _service.engine_update_plan(target_version, root).as_dict()
 
 
+def epic_engine_download_plan(
+    target_version: str, manifest_root: Optional[str] = None
+) -> Dict[str, Any]:
+    """Create a no-side-effect engine download plan."""
+
+    root = manifest_root or str(DEFAULT_MANIFEST_ROOT)
+    return _service.engine_download_plan(target_version, root).as_dict()
+
+
+def epic_engine_launch_plan(
+    target_version: str,
+    project_path: str,
+    manifest_root: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a no-side-effect UE launch plan."""
+
+    root = manifest_root or str(DEFAULT_MANIFEST_ROOT)
+    return _service.engine_launch_plan(target_version, project_path, root).as_dict()
+
+
 def epic_engine_verify(manifest_root: Optional[str] = None) -> Dict[str, Any]:
     """Verify UnrealEditor.exe exists for every manifest-listed UE install."""
 
@@ -56,6 +76,16 @@ def epic_fab_library_list(database_path: Optional[str] = None) -> Dict[str, Any]
         _service.fab.list_local_library(database_path)
         if database_path
         else _service.fab.list_local_library()
+    )
+
+
+def epic_fab_asset_inspect(asset_id: str, database_path: Optional[str] = None) -> Dict[str, Any]:
+    """Inspect one local Fab asset without changing the cache."""
+
+    return (
+        _service.fab.inspect_local_asset(asset_id, database_path)
+        if database_path
+        else _service.fab.inspect_local_asset(asset_id)
     )
 
 
@@ -86,6 +116,30 @@ def epic_launcher_status(pid: int, hwnd: int, executable: str, version: str) -> 
     return _service.launcher_status(binding)
 
 
+def epic_hook_probe(manifest_path: str) -> Dict[str, Any]:
+    """Validate a user-owned epic.hook.v1 manifest and executable digest."""
+
+    return _service.hook_probe(manifest_path)
+
+
+def epic_hook_invoke(
+    manifest_path: str,
+    operation: str,
+    payload: Dict[str, Any],
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Invoke only a declared hook operation; dry-run is the default."""
+
+    return _service.hook_invoke(
+        manifest_path,
+        operation,
+        payload,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 if FastMCP is not None:
     mcp = FastMCP("dcc-mcp-epic")
     for _tool in (
@@ -93,11 +147,16 @@ if FastMCP is not None:
         epic_runtime_doctor,
         epic_engine_list_installed,
         epic_engine_update_plan,
+        epic_engine_download_plan,
+        epic_engine_launch_plan,
         epic_engine_verify,
         epic_fab_library_list,
+        epic_fab_asset_inspect,
         epic_fab_download_plan,
         epic_project_verify,
         epic_launcher_status,
+        epic_hook_probe,
+        epic_hook_invoke,
     ):
         mcp.tool()(_tool)
 else:

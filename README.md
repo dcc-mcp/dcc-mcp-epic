@@ -17,6 +17,8 @@ no generic UI automation fallback.
 - Local Fab library index: available, read-only, when Epic's `listings_v1.db`
   exists.
 - Generic CUA fallback: disabled.
+- Self-owned hook bridge: supported through the fixed `epic.hook.v1` manifest
+  contract, with dry-run and explicit confirmation as defaults.
 - Runtime selection: `runtime-doctor` prefers a verified DCC-MCP sidecar when a
   compatible Python/MCP environment exists and otherwise selects the shared
   PyOxidizer bundle. Unreal's embedded Python is never reused.
@@ -39,6 +41,7 @@ uv run dcc-mcp-epic-cli engines
 uv run dcc-mcp-epic-cli project-verify P:\game-test\ue-arpg\RiftKidsARPG.uproject
 uv run dcc-mcp-epic-cli engine-verify
 uv run dcc-mcp-epic-cli fab-library
+uv run dcc-mcp-epic-cli fab-asset-inspect b8ff3ab4-0e81-4335-bbf0-fea15f6fcdfc
 uv run dcc-mcp-epic-cli engine-update-plan 5.5
 uv run python scripts/probe_mcp.py
 ```

@@ -69,6 +69,17 @@ class FabService:
                 connection.close()
         return {"db_path": str(path), "read_only": True, "assets": assets}
 
+    def inspect_local_asset(
+        self, asset_id: str, database_path: Union[str, Path] = DEFAULT_FAB_LIBRARY_DB
+    ) -> Dict[str, Any]:
+        """Return one locally indexed asset and its cached download metadata."""
+
+        library = self.list_local_library(database_path)
+        for asset in library.get("assets", []):
+            if asset.get("uid") == asset_id:
+                return {**library, "asset": asset}
+        return {**library, "asset": None, "reason": "asset is not present in the local index"}
+
     def plan_download(
         self,
         asset_id: str,

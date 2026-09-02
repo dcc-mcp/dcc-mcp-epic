@@ -33,12 +33,30 @@ def build_parser() -> argparse.ArgumentParser:
     plan = sub.add_parser("engine-update-plan")
     plan.add_argument("target_version")
     plan.add_argument("--manifest-root", default=None)
+    download = sub.add_parser("engine-download-plan")
+    download.add_argument("target_version")
+    download.add_argument("--manifest-root", default=None)
+    launch = sub.add_parser("engine-launch-plan")
+    launch.add_argument("target_version")
+    launch.add_argument("project_path")
+    launch.add_argument("--manifest-root", default=None)
     fab = sub.add_parser("fab-download-plan")
     fab.add_argument("asset_id")
     fab.add_argument("project_path")
     fab.add_argument("--allowed-root", required=True)
     fab.add_argument("--expected-price", type=float, default=0)
     fab.add_argument("--owned", action="store_true")
+    fab_asset = sub.add_parser("fab-asset-inspect")
+    fab_asset.add_argument("asset_id")
+    fab_asset.add_argument("--database", default=None)
+    hook_probe = sub.add_parser("hook-probe")
+    hook_probe.add_argument("manifest_path")
+    hook_invoke = sub.add_parser("hook-invoke")
+    hook_invoke.add_argument("manifest_path")
+    hook_invoke.add_argument("operation")
+    hook_invoke.add_argument("--payload", default="{}")
+    hook_invoke.add_argument("--confirmed", action="store_true")
+    hook_invoke.add_argument("--execute", action="store_true")
     status = sub.add_parser("launcher-status")
     status.add_argument("--pid", type=int, required=True)
     status.add_argument("--hwnd", type=int, required=True)
@@ -72,6 +90,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.command == "engine-update-plan":
         root = args.manifest_root or str(DEFAULT_MANIFEST_ROOT)
         _dump(service.engine_update_plan(args.target_version, root).as_dict())
+    elif args.command == "engine-download-plan":
+        root = args.manifest_root or str(DEFAULT_MANIFEST_ROOT)
+        _dump(service.engine_download_plan(args.target_version, root).as_dict())
+    elif args.command == "engine-launch-plan":
+        root = args.manifest_root or str(DEFAULT_MANIFEST_ROOT)
+        _dump(service.engine_launch_plan(args.target_version, args.project_path, root).as_dict())
     elif args.command == "fab-download-plan":
         _dump(
             service.fab.plan_download(
@@ -80,6 +104,27 @@ def main(argv: Optional[List[str]] = None) -> int:
                 args.allowed_root,
                 args.expected_price,
                 args.owned,
+            ).as_dict()
+        )
+    elif args.command == "fab-asset-inspect":
+        database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
+        _dump(service.fab.inspect_local_asset(args.asset_id, database))
+    elif args.command == "hook-probe":
+        _dump(service.hook_probe(args.manifest_path))
+    elif args.command == "hook-invoke":
+        try:
+            payload = json.loads(args.payload)
+        except ValueError as exc:
+            raise SystemExit(f"--payload must be valid JSON: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise SystemExit("--payload must be a JSON object")
+        _dump(
+            service.hook_invoke(
+                args.manifest_path,
+                args.operation,
+                payload,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
             ).as_dict()
         )
     elif args.command == "launcher-status":
