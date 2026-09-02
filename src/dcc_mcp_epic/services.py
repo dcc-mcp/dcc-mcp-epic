@@ -631,6 +631,84 @@ class EpicService:
             dry_run=dry_run,
         )
 
+    def fab_add_to_project_batch_request(
+        self,
+        asset_ids: Sequence[str],
+        project_path: Union[str, Path],
+        allowed_root: Union[str, Path],
+        hook_manifest: Union[str, Path],
+        *,
+        expected_price: Union[int, float] = 0,
+        owned: bool = False,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Dispatch one official Add to Project action per UE-native asset.
+
+        Fab does not expose a native batch Add to Project API.  The declared
+        hook is therefore responsible for iterating these bounded entries and
+        reporting per-asset completion; this adapter only validates the scope
+        and free/owned policy.
+        """
+
+        try:
+            project = resolve_allowed_project(project_path, allowed_root)
+            require_free_asset(expected_price, owned)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.HUMAN_REQUIRED,
+                "fab.add_to_project_batch.request",
+                str(exc),
+                {"side_effects_performed": False},
+            )
+        values = [str(item).strip() for item in asset_ids if str(item).strip()]
+        if not values:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.add_to_project_batch.request",
+                "asset_ids must contain at least one non-empty id",
+                {"side_effects_performed": False},
+            )
+        if len(values) > 100:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.add_to_project_batch.request",
+                "asset_ids is limited to 100 entries per request",
+                {"count": len(values), "side_effects_performed": False},
+            )
+        if len(set(values)) != len(values):
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.add_to_project_batch.request",
+                "asset_ids must not contain duplicates",
+                {"side_effects_performed": False},
+            )
+        payload = {
+            "project_path": str(project),
+            "allowed_root": str(Path(allowed_root).expanduser().resolve()),
+            "assets": [
+                {
+                    "asset_id": asset_id,
+                    "expected_price": expected_price,
+                    "owned": True,
+                    "format": "unreal-engine",
+                    "action": "add_to_project",
+                }
+                for asset_id in values
+            ],
+            "verification_required": (
+                "re-read each asset's Fab download status and Unreal project import inventory"
+            ),
+            "execution_contract": "one official Add to Project action per asset",
+        }
+        return self._typed_hook_request(
+            "fab.add_to_project_batch.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+        )
+
     def fab_export_request(
         self,
         asset_id: str,

@@ -136,6 +136,17 @@ def build_parser() -> argparse.ArgumentParser:
     fab_add_to_project.add_argument("--owned", action="store_true")
     fab_add_to_project.add_argument("--confirmed", action="store_true")
     fab_add_to_project.add_argument("--execute", action="store_true")
+    fab_add_to_project_batch = sub.add_parser("fab-add-to-project-batch-request")
+    fab_add_to_project_batch.add_argument("project_path")
+    fab_add_to_project_batch.add_argument(
+        "asset_ids", nargs="+", help="One or more Fab asset ids (max 100)"
+    )
+    fab_add_to_project_batch.add_argument("--allowed-root", required=True)
+    fab_add_to_project_batch.add_argument("--hook-manifest", required=True)
+    fab_add_to_project_batch.add_argument("--expected-price", type=float, default=0)
+    fab_add_to_project_batch.add_argument("--owned", action="store_true")
+    fab_add_to_project_batch.add_argument("--confirmed", action="store_true")
+    fab_add_to_project_batch.add_argument("--execute", action="store_true")
     fab_export = sub.add_parser("fab-export-request")
     fab_export.add_argument("asset_id")
     fab_export.add_argument("destination")
@@ -399,6 +410,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         _dump(
             service.fab_add_to_project_request(
                 args.asset_id,
+                args.project_path,
+                args.allowed_root,
+                args.hook_manifest,
+                expected_price=args.expected_price,
+                owned=args.owned,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "fab-add-to-project-batch-request":
+        _dump(
+            service.fab_add_to_project_batch_request(
+                args.asset_ids,
                 args.project_path,
                 args.allowed_root,
                 args.hook_manifest,

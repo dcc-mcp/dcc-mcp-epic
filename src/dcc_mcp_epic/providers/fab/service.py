@@ -69,6 +69,7 @@ class FabService:
             "download": "available_if_declared_owned_hook",
             "download_batch": "available_if_declared_owned_hook",
             "add_to_project": "available_if_declared_owned_hook",
+            "add_to_project_batch": "available_if_declared_owned_hook",
             "download_status": CapabilityState.READ_ONLY.value,
             "export": "available_if_declared_owned_hook",
             "import_cached": "available_if_owned_cached_or_source_download",

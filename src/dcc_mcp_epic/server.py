@@ -375,6 +375,30 @@ def epic_fab_add_to_project_request(
     ).as_dict()
 
 
+def epic_fab_add_to_project_batch_request(
+    asset_ids: List[str],
+    project_path: str,
+    allowed_root: str,
+    hook_manifest: str,
+    expected_price: float = 0,
+    owned: bool = False,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch bounded per-asset UE-native Fab Add to Project actions."""
+
+    return _service.fab_add_to_project_batch_request(
+        asset_ids,
+        project_path,
+        allowed_root,
+        hook_manifest,
+        expected_price=expected_price,
+        owned=owned,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 def epic_fab_import_cached_request(
     asset_id: str,
     project_path: str,
@@ -617,6 +641,7 @@ if FastMCP is not None:
         epic_fab_download_request,
         epic_fab_download_batch_request,
         epic_fab_add_to_project_request,
+        epic_fab_add_to_project_batch_request,
         epic_fab_export_request,
         epic_fab_import_cached_request,
         epic_fab_import_all_cached_request,

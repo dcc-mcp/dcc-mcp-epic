@@ -487,6 +487,11 @@ def test_hook_contract_describes_mutation_and_required_fields():
         "asset_id",
         "project_path",
     ]
+    assert operations["fab.add_to_project_batch.request"]["mutating"] is True
+    assert operations["fab.add_to_project_batch.request"]["required_fields"] == [
+        "assets",
+        "project_path",
+    ]
     assert operations["fab.library_sources.request"]["mutating"] is False
 
 
@@ -555,6 +560,38 @@ def test_typed_fab_add_to_project_request_is_dry_run(tmp_path):
     assert result.details["payload"]["action"] == "add_to_project"
     assert result.details["payload"]["format"] == "unreal-engine"
     assert result.details["side_effects_performed"] is False
+
+
+def test_typed_fab_add_to_project_batch_is_bounded_and_dry_run(tmp_path):
+    manifest = _hook_manifest(tmp_path, ["fab.add_to_project_batch.request"])
+    project = tmp_path / "project"
+    project.mkdir()
+    result = EpicService().fab_add_to_project_batch_request(
+        ["asset-1", "asset-2"],
+        project,
+        tmp_path,
+        manifest,
+        owned=True,
+        confirmed=True,
+    )
+    assert result.state is CapabilityState.READ_ONLY
+    assert result.operation == "fab.add_to_project_batch.request"
+    assert [item["asset_id"] for item in result.details["payload"]["assets"]] == [
+        "asset-1",
+        "asset-2",
+    ]
+    assert result.details["payload"]["execution_contract"] == (
+        "one official Add to Project action per asset"
+    )
+    assert result.details["side_effects_performed"] is False
+
+
+def test_typed_fab_add_to_project_batch_rejects_duplicates(tmp_path):
+    result = EpicService().fab_add_to_project_batch_request(
+        ["asset-1", "asset-1"], tmp_path, tmp_path, tmp_path / "missing-hook.json", owned=True
+    )
+    assert result.state is CapabilityState.UNAVAILABLE
+    assert "duplicates" in result.message
 
 
 def test_typed_engine_install_request_requires_scope_for_install_root(tmp_path):
