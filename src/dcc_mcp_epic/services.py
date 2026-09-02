@@ -36,6 +36,7 @@ class EpicService:
                 "probe": CapabilityState.READ_ONLY.value,
                 "invoke": "available_if_declared",
                 "protocol": "epic.hook.v1",
+                "contract_tool": "epic_hook_contract",
                 "operations": sorted(HOOK_OPERATIONS),
             },
             "cua_fallback": False,
