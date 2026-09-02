@@ -101,6 +101,38 @@ def test_local_fab_library_sources_merges_indexes_and_prefers_downloaded(tmp_pat
     assert merged["asset-1"]["database_path"] == str(second.resolve())
 
 
+def test_fab_download_status_rechecks_cache_path(tmp_path):
+    import sqlite3
+
+    cache_root = tmp_path / "VaultCache"
+    cache = cache_root / "Asset"
+    cache.mkdir(parents=True)
+    database = tmp_path / "listings_v1.db"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE local_listing (uid TEXT, title TEXT, category_name TEXT, "
+        "category_path TEXT)"
+    )
+    connection.execute(
+        "CREATE TABLE download_meta (listing_uid TEXT, format TEXT, quality TEXT, "
+        "path TEXT, cache_size INTEGER)"
+    )
+    connection.execute("CREATE TABLE listing_acquisition (listing_uid TEXT, user_uid TEXT)")
+    connection.execute("INSERT INTO local_listing VALUES ('asset-1', 'Asset', '', '')")
+    connection.execute(
+        "INSERT INTO download_meta VALUES ('asset-1', 'fbx', '', ?, 4)", (str(cache),)
+    )
+    connection.execute("INSERT INTO listing_acquisition VALUES ('asset-1', 'user-1')")
+    connection.commit()
+    connection.close()
+    result = EpicService().fab.inspect_download_state(
+        "asset-1", database, cache_roots=[cache_root]
+    )
+    assert result["read_only"] is True
+    assert result["state"] == "downloaded"
+    assert result["cache_path_verified"] is True
+
+
 def test_import_cached_asset_is_dry_run_then_idempotent(tmp_path, monkeypatch):
     import sqlite3
 

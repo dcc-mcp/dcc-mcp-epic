@@ -77,6 +77,13 @@ def build_parser() -> argparse.ArgumentParser:
     fab_asset = sub.add_parser("fab-asset-inspect")
     fab_asset.add_argument("asset_id")
     fab_asset.add_argument("--database", default=None)
+    fab_download_status = sub.add_parser("fab-download-status")
+    fab_download_status.add_argument("asset_id")
+    fab_download_status.add_argument("--database", default=None)
+    fab_download_status.add_argument(
+        "--cache-root", dest="cache_roots", action="append", default=None,
+        help="Approved VaultCache root; repeat for multiple Epic cache locations",
+    )
     fab_import = sub.add_parser("fab-import-cached")
     fab_import.add_argument("asset_id")
     fab_import.add_argument("project_path")
@@ -205,6 +212,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.command == "fab-asset-inspect":
         database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
         _dump(service.fab.inspect_local_asset(args.asset_id, database))
+    elif args.command == "fab-download-status":
+        database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
+        _dump(
+            service.fab.inspect_download_state(
+                args.asset_id,
+                database,
+                cache_roots=args.cache_roots,
+            )
+        )
     elif args.command == "fab-import-cached":
         database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
         _dump(

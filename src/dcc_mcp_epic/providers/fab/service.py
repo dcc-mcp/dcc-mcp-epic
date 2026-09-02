@@ -67,6 +67,7 @@ class FabService:
             "library": CapabilityState.READ_ONLY.value,
             "library_sources": CapabilityState.READ_ONLY.value,
             "download": CapabilityState.UNAVAILABLE.value,
+            "download_status": CapabilityState.READ_ONLY.value,
             "export": CapabilityState.UNAVAILABLE.value,
             "import_cached": "available_if_owned_cached_or_source_download",
             "import_all_cached": "available_if_owned_cached_or_source_download",
@@ -264,6 +265,67 @@ class FabService:
             if asset.get("uid") == asset_id:
                 return {**library, "asset": asset}
         return {**library, "asset": None, "reason": "asset is not present in the local index"}
+
+    def inspect_download_state(
+        self,
+        asset_id: str,
+        database_path: Union[str, Path] = DEFAULT_FAB_LIBRARY_DB,
+        *,
+        cache_roots: Optional[Sequence[Union[str, Path]]] = None,
+    ) -> Dict[str, Any]:
+        """Re-read one Fab entry and report download evidence without mutation."""
+
+        inspected = self.inspect_local_asset(asset_id, database_path)
+        asset = inspected.get("asset")
+        result: Dict[str, Any] = {
+            "operation": "fab.download_status",
+            "read_only": True,
+            "asset_id": asset_id,
+            "database_path": inspected.get("db_path"),
+            "state": "not_indexed",
+            "downloaded": False,
+            "owned": False,
+            "path": None,
+            "path_exists": False,
+            "cache_path_verified": False,
+        }
+        if not asset:
+            result["reason"] = "asset is not present in the local index"
+            return result
+        result.update(
+            {
+                "title": asset.get("title"),
+                "format": asset.get("format"),
+                "quality": asset.get("quality"),
+                "owned": bool(asset.get("owned")),
+                "downloaded": bool(asset.get("downloaded")),
+                "path": asset.get("path"),
+                "cache_size": asset.get("cache_size"),
+            }
+        )
+        source_value = asset.get("path")
+        if not source_value:
+            result["state"] = "owned_not_downloaded" if result["owned"] else "not_owned"
+            return result
+        source = Path(str(source_value)).expanduser().resolve()
+        result["path"] = str(source)
+        result["path_exists"] = source.exists()
+        approved_roots = [DEFAULT_FAB_CACHE_ROOT.expanduser().resolve()]
+        if cache_roots:
+            approved_roots.extend(Path(item).expanduser().resolve() for item in cache_roots)
+        result["cache_path_verified"] = any(
+            self._is_relative_to(source, root) for root in approved_roots
+        )
+        if not result["cache_path_verified"]:
+            result["state"] = "path_outside_approved_cache"
+            return result
+        if result["downloaded"] and result["path_exists"]:
+            result["state"] = "downloaded"
+        elif result["owned"]:
+            result["state"] = "owned_path_missing"
+        else:
+            result["state"] = "not_owned"
+        return result
 
     def plan_download(
         self,

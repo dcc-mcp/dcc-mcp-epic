@@ -18,6 +18,8 @@ no generic UI automation fallback.
   exists.
 - Multi-source Fab inventory: available, read-only, merges explicitly selected
   indexes and can discover `listings_v1.db` below caller-approved roots.
+- Fab download status: available, read-only, re-reads ownership, path and
+  cache evidence after a user-owned download hook.
 - Cached Fab import: available for already-owned/downloaded Unreal Content;
   dry-run, explicit confirmation, VaultCache-root enforcement, no-overwrite
   behavior, and per-file provenance hashes are built in. FBX/GLTF/OBJ/USD
@@ -54,6 +56,9 @@ uv run dcc-mcp-epic-cli fab-library-sources `
   --search-root C:\ProgramData\Epic `
   --search-root C:\Users\hallong\Downloads\Video `
   --search-root F:\UE\EpicGamesLauncher
+uv run dcc-mcp-epic-cli fab-download-status <asset-id> `
+  --database F:\UE\EpicGamesLauncher\VaultCache\FabLibrary\listings_v1.db `
+  --cache-root F:\UE\EpicGamesLauncher\VaultCache
 uv run dcc-mcp-epic-cli fab-asset-inspect b8ff3ab4-0e81-4335-bbf0-fea15f6fcdfc
 uv run dcc-mcp-epic-cli fab-download-request <asset-id> P:\game-test\ue-arpg `
   --allowed-root P:\game-test\ue-arpg --hook-manifest C:\path\hook.json `

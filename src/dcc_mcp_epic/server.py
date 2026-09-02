@@ -110,6 +110,20 @@ def epic_fab_asset_inspect(asset_id: str, database_path: Optional[str] = None) -
     )
 
 
+def epic_fab_download_status(
+    asset_id: str,
+    database_path: Optional[str] = None,
+    cache_roots: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Re-read local Fab state to verify a hook download landed in cache."""
+
+    if database_path:
+        return _service.fab.inspect_download_state(
+            asset_id, database_path, cache_roots=cache_roots
+        )
+    return _service.fab.inspect_download_state(asset_id, cache_roots=cache_roots)
+
+
 def epic_fab_download_plan(
     asset_id: str,
     project_path: str,
@@ -312,6 +326,7 @@ if FastMCP is not None:
         epic_fab_library_list,
         epic_fab_library_sources,
         epic_fab_asset_inspect,
+        epic_fab_download_status,
         epic_fab_download_plan,
         epic_fab_download_request,
         epic_fab_import_cached_asset,
