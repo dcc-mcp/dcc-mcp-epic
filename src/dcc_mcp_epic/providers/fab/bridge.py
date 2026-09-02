@@ -93,6 +93,18 @@ def validate_import_payload(
     for asset in assets:
         if not isinstance(asset, dict):
             raise ValueError("asset entries must be JSON objects")
+        required = {
+            "id",
+            "path",
+            "native_files",
+            "additional_textures",
+            "meshes",
+            "materials",
+            "metadata",
+        }
+        missing = sorted(required - set(asset))
+        if missing:
+            raise ValueError(f"asset is missing FabLauncher fields: {missing}")
         asset_id = asset.get("id")
         if not isinstance(asset_id, str) or not asset_id.strip():
             raise ValueError("every asset requires a non-empty string id")
@@ -106,6 +118,22 @@ def validate_import_payload(
             paths.append(str(resolved))
         if not paths:
             raise ValueError(f"asset {asset_id!r} has no import files")
+        metadata = asset.get("metadata")
+        if not isinstance(metadata, dict):
+            raise ValueError("asset field 'metadata' must be an object")
+        for section in ("fab", "launcher", "megascans"):
+            if not isinstance(metadata.get(section), dict):
+                raise ValueError(f"metadata must contain a {section!r} object")
+        fab_metadata = metadata["fab"]
+        if not isinstance(fab_metadata.get("isQuixel"), bool):
+            raise ValueError("metadata.fab.isQuixel must be a boolean")
+        if not isinstance(fab_metadata.get("listing"), dict):
+            raise ValueError("metadata.fab.listing must be an object")
+        launcher_metadata = metadata["launcher"]
+        if not isinstance(launcher_metadata.get("version"), str) or not isinstance(
+            launcher_metadata.get("listening_port"), int
+        ):
+            raise ValueError("metadata.launcher requires version and listening_port")
         validated.append({"id": asset_id, "path_count": len(paths), "paths": paths})
     return {"assets": validated, "asset_count": len(validated), "root": str(root)}
 

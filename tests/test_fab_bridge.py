@@ -7,8 +7,21 @@ from dcc_mcp_epic.providers.fab.bridge import probe_fab_launcher, validate_impor
 def test_validate_fab_launcher_payload_requires_existing_supported_files(tmp_path):
     source = tmp_path / "asset.fbx"
     source.write_bytes(b"fbx")
+    asset = {
+        "id": "asset-1",
+        "path": str(source),
+        "native_files": [str(source)],
+        "additional_textures": [],
+        "meshes": [],
+        "materials": [],
+        "metadata": {
+            "fab": {"isQuixel": False, "listing": {}},
+            "launcher": {"version": "0.5.0", "listening_port": 23429},
+            "megascans": {},
+        },
+    }
     evidence = validate_import_payload(
-        {"assets": [{"id": "asset-1", "path": str(source), "native_files": [str(source)]}]},
+        {"assets": [asset]},
         tmp_path,
     )
     assert evidence["asset_count"] == 1
@@ -20,14 +33,43 @@ def test_validate_fab_launcher_payload_rejects_traversal_and_unknown_extension(t
 
     with pytest.raises(ValueError, match="outside allowed root"):
         validate_import_payload(
-            {"assets": [{"id": "asset-1", "path": str(tmp_path.parent / "asset.fbx")}]},
+            {
+                "assets": [
+                    {
+                        "id": "asset-1",
+                        "path": str(tmp_path.parent / "asset.fbx"),
+                        "native_files": [],
+                        "additional_textures": [],
+                        "meshes": [],
+                        "materials": [],
+                        "metadata": {},
+                    }
+                ]
+            },
             tmp_path,
         )
     unsupported = tmp_path / "asset.exe"
     unsupported.write_bytes(b"exe")
     with pytest.raises(ValueError, match="unsupported"):
         validate_import_payload(
-            {"assets": [{"id": "asset-1", "path": str(unsupported)}]}, tmp_path
+            {
+                "assets": [
+                    {
+                        "id": "asset-1",
+                        "path": str(unsupported),
+                        "native_files": [],
+                        "additional_textures": [],
+                        "meshes": [],
+                        "materials": [],
+                        "metadata": {
+                            "fab": {"isQuixel": False, "listing": {}},
+                            "launcher": {"version": "0.5.0", "listening_port": 23429},
+                            "megascans": {},
+                        },
+                    }
+                ]
+            },
+            tmp_path,
         )
 
 
