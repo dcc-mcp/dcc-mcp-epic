@@ -239,6 +239,36 @@ def epic_fab_search(
     )
 
 
+def epic_fab_search_request(
+    query: str,
+    hook_manifest: str,
+    database_paths: Optional[List[str]] = None,
+    search_roots: Optional[List[str]] = None,
+    category: str = "",
+    formats: Optional[List[str]] = None,
+    owned_only: bool = False,
+    downloaded_only: bool = False,
+    max_depth: int = 6,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Route a read-only Fab search through a user-owned hook."""
+
+    return _service.fab_search_request(
+        query,
+        hook_manifest,
+        database_paths=database_paths,
+        search_roots=search_roots,
+        category=category,
+        formats=formats,
+        owned_only=owned_only,
+        downloaded_only=downloaded_only,
+        max_depth=max_depth,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 def epic_fab_download_status(
     asset_id: str,
     database_path: Optional[str] = None,
@@ -251,6 +281,82 @@ def epic_fab_download_status(
             asset_id, database_path, cache_roots=cache_roots
         )
     return _service.fab.inspect_download_state(asset_id, cache_roots=cache_roots)
+
+
+def epic_fab_library_request(
+    hook_manifest: str,
+    database_path: Optional[str] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Route a read-only Fab library read through a user-owned hook."""
+
+    return _service.fab_library_request(
+        hook_manifest,
+        database_path=database_path,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_fab_library_sources_request(
+    hook_manifest: str,
+    database_paths: Optional[List[str]] = None,
+    search_roots: Optional[List[str]] = None,
+    max_depth: int = 6,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Route multi-source Fab discovery through a user-owned hook."""
+
+    return _service.fab_library_sources_request(
+        hook_manifest,
+        database_paths=database_paths,
+        search_roots=search_roots,
+        max_depth=max_depth,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_fab_download_status_request(
+    asset_id: str,
+    hook_manifest: str,
+    database_path: Optional[str] = None,
+    cache_roots: Optional[List[str]] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Route fresh Fab download status through a user-owned hook."""
+
+    return _service.fab_download_status_request(
+        asset_id,
+        hook_manifest,
+        database_path=database_path,
+        cache_roots=cache_roots,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_fab_import_inventory_request(
+    project_path: str,
+    allowed_root: str,
+    hook_manifest: str,
+    destination_subdir: str = "Fab",
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Route a scoped Fab project inventory read through a user-owned hook."""
+
+    return _service.fab_import_inventory_request(
+        project_path,
+        allowed_root,
+        hook_manifest,
+        destination_subdir=destination_subdir,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
 
 
 def epic_fab_download_plan(
@@ -533,6 +639,24 @@ def epic_fab_launcher_status_probe(
     return probe_fab_status_listener(launcher_pid, port)
 
 
+def epic_fab_launcher_status_request(
+    launcher_pid: int,
+    hook_manifest: str,
+    port: int = DEFAULT_FAB_STATUS_PORT,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Route a Fab callback listener probe through a user-owned hook."""
+
+    return _service.fab_launcher_status_request(
+        launcher_pid,
+        hook_manifest,
+        port=port,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 def epic_fab_launcher_import_request(
     payload: Dict[str, Any],
     editor_pid: int,
@@ -592,6 +716,26 @@ def epic_launcher_status(pid: int, hwnd: int, executable: str, version: str) -> 
     return _service.launcher_status(binding)
 
 
+def epic_launcher_status_request(
+    pid: int,
+    hwnd: int,
+    executable: str,
+    version: str,
+    hook_manifest: str,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Route exact Launcher status evidence through a user-owned hook."""
+
+    binding = LauncherBinding(pid, hwnd, Path(executable), version)
+    return _service.launcher_status_request(
+        binding,
+        hook_manifest,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 def epic_hook_probe(manifest_path: str) -> Dict[str, Any]:
     """Validate a user-owned epic.hook.v1 manifest and executable digest."""
 
@@ -633,10 +777,14 @@ if FastMCP is not None:
         epic_engine_verify_request,
         epic_engine_launch_request,
         epic_fab_library_list,
+        epic_fab_library_request,
         epic_fab_library_sources,
+        epic_fab_library_sources_request,
         epic_fab_asset_inspect,
         epic_fab_search,
+        epic_fab_search_request,
         epic_fab_download_status,
+        epic_fab_download_status_request,
         epic_fab_download_plan,
         epic_fab_download_request,
         epic_fab_download_batch_request,
@@ -648,12 +796,15 @@ if FastMCP is not None:
         epic_fab_import_cached_asset,
         epic_fab_import_all_cached,
         epic_fab_project_inventory,
+        epic_fab_import_inventory_request,
         epic_fab_launcher_probe,
         epic_fab_launcher_status_probe,
+        epic_fab_launcher_status_request,
         epic_fab_launcher_import_request,
         epic_project_verify,
         epic_project_import_request,
         epic_launcher_status,
+        epic_launcher_status_request,
         epic_hook_probe,
         epic_hook_invoke,
     ):

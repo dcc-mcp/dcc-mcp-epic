@@ -281,9 +281,19 @@ def invoke_hook(
             "hook returned invalid JSON",
             {"hook": spec.name, "side_effects_performed": False},
         )
+    # The operation allowlist is also a side-effect contract.  A hook may
+    # still perform its own internal bookkeeping, but read-only operations
+    # must never be reported as adapter-side mutations.  This keeps callers'
+    # completion gates honest and lets typed read-only requests share the same
+    # bridge as mutating requests.
+    side_effects_performed = operation in MUTATING_HOOK_OPERATIONS
     return OperationResult(
         CapabilityState.AVAILABLE,
         operation,
         "hook operation completed",
-        {"hook": spec.name, "response": response, "side_effects_performed": True},
+        {
+            "hook": spec.name,
+            "response": response,
+            "side_effects_performed": side_effects_performed,
+        },
     )

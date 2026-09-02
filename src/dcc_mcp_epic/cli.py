@@ -35,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
     engine_verify.add_argument("--manifest-root", default=None)
     fab_library = sub.add_parser("fab-library")
     fab_library.add_argument("--database", default=None)
+    fab_library_request = sub.add_parser("fab-library-request")
+    fab_library_request.add_argument("--hook-manifest", required=True)
+    fab_library_request.add_argument("--database", default=None)
+    fab_library_request.add_argument("--confirmed", action="store_true")
+    fab_library_request.add_argument("--execute", action="store_true")
     fab_sources = sub.add_parser("fab-library-sources")
     fab_sources.add_argument(
         "--database", dest="databases", action="append", default=None,
@@ -45,6 +50,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Root to scan read-only for listings_v1.db; repeat as needed",
     )
     fab_sources.add_argument("--max-depth", type=int, default=6)
+    fab_sources_request = sub.add_parser("fab-library-sources-request")
+    fab_sources_request.add_argument("--hook-manifest", required=True)
+    fab_sources_request.add_argument(
+        "--database", dest="databases", action="append", default=None,
+        help="Explicit listings_v1.db path; repeat for multiple Epic cache indexes",
+    )
+    fab_sources_request.add_argument(
+        "--search-root", dest="search_roots", action="append", default=None,
+        help="Root to scan read-only for listings_v1.db; repeat as needed",
+    )
+    fab_sources_request.add_argument("--max-depth", type=int, default=6)
+    fab_sources_request.add_argument("--confirmed", action="store_true")
+    fab_sources_request.add_argument("--execute", action="store_true")
     project = sub.add_parser("project-verify")
     project.add_argument("project_path")
     project.add_argument("--engine", default="5.5")
@@ -201,6 +219,24 @@ def build_parser() -> argparse.ArgumentParser:
     fab_search.add_argument("--owned-only", action="store_true")
     fab_search.add_argument("--downloaded-only", action="store_true")
     fab_search.add_argument("--max-depth", type=int, default=6)
+    fab_search_request = sub.add_parser("fab-search-request")
+    fab_search_request.add_argument("query", nargs="?", default="")
+    fab_search_request.add_argument("--hook-manifest", required=True)
+    fab_search_request.add_argument(
+        "--database", dest="databases", action="append", default=None,
+        help="Explicit listings_v1.db path; repeat for multiple indexes",
+    )
+    fab_search_request.add_argument(
+        "--search-root", dest="search_roots", action="append", default=None,
+        help="Root to scan read-only for listings_v1.db; repeat as needed",
+    )
+    fab_search_request.add_argument("--category", default="")
+    fab_search_request.add_argument("--format", dest="formats", action="append", default=None)
+    fab_search_request.add_argument("--owned-only", action="store_true")
+    fab_search_request.add_argument("--downloaded-only", action="store_true")
+    fab_search_request.add_argument("--max-depth", type=int, default=6)
+    fab_search_request.add_argument("--confirmed", action="store_true")
+    fab_search_request.add_argument("--execute", action="store_true")
     fab_download_status = sub.add_parser("fab-download-status")
     fab_download_status.add_argument("asset_id")
     fab_download_status.add_argument("--database", default=None)
@@ -208,6 +244,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--cache-root", dest="cache_roots", action="append", default=None,
         help="Approved VaultCache root; repeat for multiple Epic cache locations",
     )
+    fab_download_status_request = sub.add_parser("fab-download-status-request")
+    fab_download_status_request.add_argument("asset_id")
+    fab_download_status_request.add_argument("--hook-manifest", required=True)
+    fab_download_status_request.add_argument("--database", default=None)
+    fab_download_status_request.add_argument(
+        "--cache-root", dest="cache_roots", action="append", default=None,
+        help="Approved VaultCache root; repeat for multiple Epic cache locations",
+    )
+    fab_download_status_request.add_argument("--confirmed", action="store_true")
+    fab_download_status_request.add_argument("--execute", action="store_true")
     fab_import = sub.add_parser("fab-import-cached")
     fab_import.add_argument("asset_id")
     fab_import.add_argument("project_path")
@@ -237,12 +283,25 @@ def build_parser() -> argparse.ArgumentParser:
     fab_inventory.add_argument("project_path")
     fab_inventory.add_argument("--allowed-root", required=True)
     fab_inventory.add_argument("--destination-subdir", default="Fab")
+    fab_inventory_request = sub.add_parser("fab-import-inventory-request")
+    fab_inventory_request.add_argument("project_path")
+    fab_inventory_request.add_argument("--allowed-root", required=True)
+    fab_inventory_request.add_argument("--hook-manifest", required=True)
+    fab_inventory_request.add_argument("--destination-subdir", default="Fab")
+    fab_inventory_request.add_argument("--confirmed", action="store_true")
+    fab_inventory_request.add_argument("--execute", action="store_true")
     fab_probe = sub.add_parser("fab-launcher-probe")
     fab_probe.add_argument("--editor-pid", type=int, required=True)
     fab_probe.add_argument("--port", type=int, default=DEFAULT_FAB_LAUNCHER_PORT)
     fab_status_probe = sub.add_parser("fab-launcher-status-probe")
     fab_status_probe.add_argument("--launcher-pid", type=int, required=True)
     fab_status_probe.add_argument("--port", type=int, default=DEFAULT_FAB_STATUS_PORT)
+    fab_status_request = sub.add_parser("fab-launcher-status-request")
+    fab_status_request.add_argument("--launcher-pid", type=int, required=True)
+    fab_status_request.add_argument("--hook-manifest", required=True)
+    fab_status_request.add_argument("--port", type=int, default=DEFAULT_FAB_STATUS_PORT)
+    fab_status_request.add_argument("--confirmed", action="store_true")
+    fab_status_request.add_argument("--execute", action="store_true")
     fab_request = sub.add_parser("fab-launcher-import")
     fab_request.add_argument("payload", help="JSON file containing an assets list")
     fab_request.add_argument("--editor-pid", type=int, required=True)
@@ -266,6 +325,14 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--hwnd", type=int, required=True)
     status.add_argument("--executable", type=Path, required=True)
     status.add_argument("--version", required=True)
+    status_request = sub.add_parser("launcher-status-request")
+    status_request.add_argument("--pid", type=int, required=True)
+    status_request.add_argument("--hwnd", type=int, required=True)
+    status_request.add_argument("--executable", type=Path, required=True)
+    status_request.add_argument("--version", required=True)
+    status_request.add_argument("--hook-manifest", required=True)
+    status_request.add_argument("--confirmed", action="store_true")
+    status_request.add_argument("--execute", action="store_true")
     return parser
 
 
@@ -295,6 +362,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.command == "fab-library":
         database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
         _dump(service.fab.list_local_library(database))
+    elif args.command == "fab-library-request":
+        _dump(
+            service.fab_library_request(
+                args.hook_manifest,
+                database_path=args.database,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
     elif args.command == "fab-library-sources":
         _dump(
             service.fab.list_local_libraries(
@@ -302,6 +378,17 @@ def main(argv: Optional[List[str]] = None) -> int:
                 search_roots=args.search_roots,
                 max_depth=args.max_depth,
             )
+        )
+    elif args.command == "fab-library-sources-request":
+        _dump(
+            service.fab_library_sources_request(
+                args.hook_manifest,
+                database_paths=args.databases,
+                search_roots=args.search_roots,
+                max_depth=args.max_depth,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
         )
     elif args.command == "engine-update-plan":
         root = args.manifest_root or str(DEFAULT_MANIFEST_ROOT)
@@ -448,6 +535,22 @@ def main(argv: Optional[List[str]] = None) -> int:
                 max_depth=args.max_depth,
             )
         )
+    elif args.command == "fab-search-request":
+        _dump(
+            service.fab_search_request(
+                args.query,
+                args.hook_manifest,
+                database_paths=args.databases,
+                search_roots=args.search_roots,
+                category=args.category,
+                formats=args.formats,
+                owned_only=args.owned_only,
+                downloaded_only=args.downloaded_only,
+                max_depth=args.max_depth,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
     elif args.command == "fab-download-status":
         database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
         _dump(
@@ -456,6 +559,17 @@ def main(argv: Optional[List[str]] = None) -> int:
                 database,
                 cache_roots=args.cache_roots,
             )
+        )
+    elif args.command == "fab-download-status-request":
+        _dump(
+            service.fab_download_status_request(
+                args.asset_id,
+                args.hook_manifest,
+                database_path=args.database,
+                cache_roots=args.cache_roots,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
         )
     elif args.command == "fab-export-request":
         _dump(
@@ -532,6 +646,17 @@ def main(argv: Optional[List[str]] = None) -> int:
                 destination_subdir=args.destination_subdir,
             )
         )
+    elif args.command == "fab-import-inventory-request":
+        _dump(
+            service.fab_import_inventory_request(
+                args.project_path,
+                args.allowed_root,
+                args.hook_manifest,
+                destination_subdir=args.destination_subdir,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
     elif args.command == "project-import-request":
         _dump(
             service.project_import_request(
@@ -547,6 +672,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         _dump(probe_fab_launcher(args.editor_pid, args.port))
     elif args.command == "fab-launcher-status-probe":
         _dump(probe_fab_status_listener(args.launcher_pid, args.port))
+    elif args.command == "fab-launcher-status-request":
+        _dump(
+            service.fab_launcher_status_request(
+                args.launcher_pid,
+                args.hook_manifest,
+                port=args.port,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
     elif args.command == "fab-launcher-import":
         try:
             payload = json.loads(Path(args.payload).read_text(encoding="utf-8-sig"))
@@ -588,6 +723,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.command == "launcher-status":
         binding = LauncherBinding(args.pid, args.hwnd, args.executable, args.version)
         _dump(service.launcher_status(binding))
+    elif args.command == "launcher-status-request":
+        binding = LauncherBinding(args.pid, args.hwnd, args.executable, args.version)
+        _dump(
+            service.launcher_status_request(
+                binding,
+                args.hook_manifest,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
     return 0
 
 

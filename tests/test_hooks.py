@@ -54,6 +54,18 @@ def test_hook_execute_uses_fixed_argv_and_json(tmp_path):
     assert result.details["response"]["ok"] is True
 
 
+def test_read_only_hook_execution_does_not_claim_mutation(tmp_path):
+    manifest = json.loads(_manifest(tmp_path).read_text(encoding="utf-8"))
+    manifest["operations"] = ["fab.search.request"]
+    manifest["requires_confirmation"] = []
+    path = tmp_path / "read-only.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    spec = load_hook_manifest(path)
+    result = invoke_hook(spec, "fab.search.request", {"query": "vfx"}, dry_run=False)
+    assert result.state is CapabilityState.AVAILABLE
+    assert result.details["side_effects_performed"] is False
+
+
 def test_mutating_operation_must_declare_confirmation(tmp_path):
     manifest = json.loads(_manifest(tmp_path).read_text(encoding="utf-8"))
     manifest["operations"] = ["fab.download.request"]

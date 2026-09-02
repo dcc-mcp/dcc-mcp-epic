@@ -1,8 +1,9 @@
 import hashlib
 import json
+import os
 import sys
 
-from dcc_mcp_epic.models import CapabilityState
+from dcc_mcp_epic.models import CapabilityState, LauncherBinding
 from dcc_mcp_epic.services import EpicService
 
 
@@ -616,6 +617,60 @@ def test_typed_fab_export_request_enforces_free_owned_policy(tmp_path):
     )
     assert result.state is CapabilityState.HUMAN_REQUIRED
     assert "ownership" in result.message
+
+
+def test_read_only_fab_search_request_includes_local_plan(tmp_path):
+    database = tmp_path / "listings_v1.db"
+    _fab_db(
+        database,
+        [("asset-1", "Free Arrow Trail", "VFX", "unreal-engine", None, True)],
+    )
+    manifest = _hook_manifest(tmp_path, ["fab.search.request"])
+    result = EpicService().fab_search_request(
+        "arrow",
+        manifest,
+        database_paths=[database],
+        owned_only=True,
+        confirmed=True,
+    )
+    assert result.state is CapabilityState.READ_ONLY
+    assert result.operation == "fab.search.request"
+    assert result.details["payload"]["query"] == "arrow"
+    assert result.details["plan"]["details"]["result_count"] == 1
+
+
+def test_read_only_inventory_and_status_requests_are_scoped(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    manifest = _hook_manifest(tmp_path, ["fab.import_inventory.request"])
+    result = EpicService().fab_import_inventory_request(
+        project,
+        tmp_path,
+        manifest,
+        confirmed=True,
+    )
+    assert result.state is CapabilityState.READ_ONLY
+    assert result.details["payload"]["project_path"] == str(project.resolve())
+
+    status_manifest = _hook_manifest(tmp_path, ["fab.download_status.request"])
+    status = EpicService().fab_download_status_request(
+        "missing-asset",
+        status_manifest,
+        database_path=tmp_path / "missing.db",
+        confirmed=True,
+    )
+    assert status.state is CapabilityState.READ_ONLY
+    assert status.details["plan"]["details"]["state"] == "not_indexed"
+
+
+def test_launcher_status_request_preserves_exact_binding(tmp_path):
+    manifest = _hook_manifest(tmp_path, ["launcher.status"])
+    binding = LauncherBinding(os.getpid(), 1, __import__("pathlib").Path(sys.executable), "test")
+    result = EpicService().launcher_status_request(binding, manifest, confirmed=True)
+    assert result.state is CapabilityState.READ_ONLY
+    assert result.operation == "launcher.status"
+    assert result.details["payload"]["pid"] == os.getpid()
+    assert result.details["payload"]["hwnd"] == 1
 
 
 def test_project_import_request_rejects_source_traversal(tmp_path):

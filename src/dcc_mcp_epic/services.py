@@ -3,12 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Union
 
+import psutil
+
 from .hooks import HOOK_OPERATIONS, invoke_hook, load_hook_manifest, probe_hook
 from .models import CapabilityState, LauncherBinding, OperationResult
 from .policy import require_free_asset, resolve_allowed_project
 from .providers.epic_launcher.manifest import DEFAULT_MANIFEST_ROOT, list_engine_installs
 from .providers.epic_launcher.runtime import bind_launcher
-from .providers.fab.service import FabService
+from .providers.fab.bridge import DEFAULT_FAB_STATUS_PORT, probe_fab_status_listener
+from .providers.fab.service import DEFAULT_FAB_LIBRARY_DB, FabService
 from .providers.unreal.project import verify_project
 
 
@@ -25,6 +28,7 @@ class EpicService:
             "engine.download": CapabilityState.HUMAN_REQUIRED.value,
             "engine.launch": CapabilityState.READ_ONLY.value,
             "engine.verify": CapabilityState.READ_ONLY.value,
+            "launcher.status_request": "available_if_declared_read_only_hook",
             "engine.install.request": "available_if_declared_hook",
             "engine.update.request": "available_if_declared_hook",
             "engine.download.request": "available_if_declared_hook",
@@ -44,6 +48,51 @@ class EpicService:
 
     def launcher_status(self, binding: LauncherBinding) -> Dict[str, Any]:
         return bind_launcher(binding).status()
+
+    def launcher_status_request(
+        self,
+        binding: LauncherBinding,
+        hook_manifest: Union[str, Path],
+        *,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Route exact Launcher status evidence through a read-only hook.
+
+        The adapter still binds the caller supplied PID/HWND/executable before
+        invoking the hook.  A hook can therefore replace the Launcher-specific
+        status implementation without receiving an unscoped process selector.
+        """
+
+        try:
+            status = self.launcher_status(binding)
+        except (OSError, ValueError, psutil.Error) as exc:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "launcher.status",
+                f"Launcher binding failed: {exc}",
+                {"binding": binding.as_dict(), "side_effects_performed": False},
+            )
+        payload = {
+            "pid": int(binding.pid),
+            "hwnd": int(binding.hwnd),
+            "executable": str(binding.executable.expanduser().resolve()),
+            "version": str(binding.version),
+            "status": status,
+        }
+        return self._typed_hook_request(
+            "launcher.status",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "launcher.status",
+                "exact Launcher binding status was read before invoking the hook",
+                {"binding": binding.as_dict(), "status": status},
+            ),
+        )
 
     def list_engines(
         self, manifest_root: Union[str, Path] = DEFAULT_MANIFEST_ROOT
@@ -392,6 +441,251 @@ class EpicService:
             confirmed=confirmed,
             dry_run=dry_run,
             plan=plan,
+        )
+
+    def fab_search_request(
+        self,
+        query: str,
+        hook_manifest: Union[str, Path],
+        *,
+        database_paths: Optional[Sequence[Union[str, Path]]] = None,
+        search_roots: Optional[Sequence[Union[str, Path]]] = None,
+        category: str = "",
+        formats: Optional[Sequence[str]] = None,
+        owned_only: bool = False,
+        downloaded_only: bool = False,
+        max_depth: int = 6,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Route a read-only Fab search through a user-owned provider hook."""
+
+        plan = self.fab.search_local_library(
+            query,
+            database_paths,
+            search_roots=search_roots,
+            category=category,
+            formats=formats,
+            owned_only=owned_only,
+            downloaded_only=downloaded_only,
+            max_depth=max_depth,
+        )
+        payload: Dict[str, Any] = {
+            "query": str(query or ""),
+            "category": str(category or ""),
+            "formats": [str(item) for item in (formats or [])],
+            "owned_only": bool(owned_only),
+            "downloaded_only": bool(downloaded_only),
+            "max_depth": int(max_depth),
+        }
+        if database_paths:
+            payload["database_paths"] = [
+                str(Path(item).expanduser().resolve()) for item in database_paths
+            ]
+        if search_roots:
+            payload["search_roots"] = [
+                str(Path(item).expanduser().resolve()) for item in search_roots
+            ]
+        return self._typed_hook_request(
+            "fab.search.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "fab.search",
+                "local Fab search was read before invoking the provider hook",
+                plan,
+            ),
+        )
+
+    def fab_library_request(
+        self,
+        hook_manifest: Union[str, Path],
+        *,
+        database_path: Optional[Union[str, Path]] = None,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Route a read-only single-index Fab library read to a hook."""
+
+        local = self.fab.list_local_library(database_path or DEFAULT_FAB_LIBRARY_DB)
+        payload: Dict[str, Any] = {}
+        if database_path is not None:
+            payload["database_path"] = str(Path(database_path).expanduser().resolve())
+        return self._typed_hook_request(
+            "fab.library.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "fab.library",
+                "local Fab library was read before invoking the provider hook",
+                local,
+            ),
+        )
+
+    def fab_library_sources_request(
+        self,
+        hook_manifest: Union[str, Path],
+        *,
+        database_paths: Optional[Sequence[Union[str, Path]]] = None,
+        search_roots: Optional[Sequence[Union[str, Path]]] = None,
+        max_depth: int = 6,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Route multi-index Fab discovery to a read-only provider hook."""
+
+        local = self.fab.list_local_libraries(
+            database_paths,
+            search_roots=search_roots,
+            max_depth=max_depth,
+        )
+        payload: Dict[str, Any] = {"max_depth": int(max_depth)}
+        if database_paths:
+            payload["database_paths"] = [
+                str(Path(item).expanduser().resolve()) for item in database_paths
+            ]
+        if search_roots:
+            payload["search_roots"] = [
+                str(Path(item).expanduser().resolve()) for item in search_roots
+            ]
+        return self._typed_hook_request(
+            "fab.library_sources.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "fab.library_sources",
+                "local Fab sources were discovered before invoking the provider hook",
+                local,
+            ),
+        )
+
+    def fab_download_status_request(
+        self,
+        asset_id: str,
+        hook_manifest: Union[str, Path],
+        *,
+        database_path: Optional[Union[str, Path]] = None,
+        cache_roots: Optional[Sequence[Union[str, Path]]] = None,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Route fresh Fab ownership/download status to a read-only hook."""
+
+        local = self.fab.inspect_download_state(
+            asset_id,
+            database_path or DEFAULT_FAB_LIBRARY_DB,
+            cache_roots=cache_roots,
+        )
+        payload: Dict[str, Any] = {"asset_id": str(asset_id)}
+        if database_path is not None:
+            payload["database_path"] = str(Path(database_path).expanduser().resolve())
+        if cache_roots:
+            payload["cache_roots"] = [
+                str(Path(item).expanduser().resolve()) for item in cache_roots
+            ]
+        return self._typed_hook_request(
+            "fab.download_status.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "fab.download_status",
+                "local Fab download evidence was read before invoking the provider hook",
+                local,
+            ),
+        )
+
+    def fab_import_inventory_request(
+        self,
+        project_path: Union[str, Path],
+        allowed_root: Union[str, Path],
+        hook_manifest: Union[str, Path],
+        *,
+        destination_subdir: str = "Fab",
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Route a scoped project inventory read to a provider hook."""
+
+        try:
+            project = resolve_allowed_project(project_path, allowed_root)
+            if Path(destination_subdir).is_absolute() or ".." in Path(destination_subdir).parts:
+                raise ValueError("destination_subdir must be relative and cannot traverse")
+            local = self.fab.project_import_inventory(
+                project,
+                allowed_root,
+                destination_subdir=destination_subdir,
+            )
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.import_inventory.request",
+                str(exc),
+                {"side_effects_performed": False},
+            )
+        payload = {
+            "project_path": str(project),
+            "allowed_root": str(Path(allowed_root).expanduser().resolve()),
+            "destination_subdir": destination_subdir,
+        }
+        return self._typed_hook_request(
+            "fab.import_inventory.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "fab.import_inventory",
+                "project import inventory was read before invoking the provider hook",
+                local,
+            ),
+        )
+
+    def fab_launcher_status_request(
+        self,
+        launcher_pid: int,
+        hook_manifest: Union[str, Path],
+        *,
+        port: int = DEFAULT_FAB_STATUS_PORT,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Route the Launcher Fab callback listener probe to a read-only hook."""
+
+        try:
+            local = probe_fab_status_listener(launcher_pid, port)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.launcher_status.request",
+                str(exc),
+                {"side_effects_performed": False},
+            )
+        payload = {"launcher_pid": int(launcher_pid), "port": int(port)}
+        return self._typed_hook_request(
+            "fab.launcher_status.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "fab.launcher_status",
+                "Fab callback listener was probed before invoking the provider hook",
+                local,
+            ),
         )
 
     def fab_download_request(

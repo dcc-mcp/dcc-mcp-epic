@@ -12,9 +12,14 @@ Initial allowlist:
 - `engine.download.request`
 - `engine.verify.request`
 - `engine.launch.request`
+- `fab.search.request`
+- `fab.library.request`
+- `fab.library_sources.request`
 - `fab.download.request`
 - `fab.download_batch.request`
+- `fab.download_status.request`
 - `fab.add_to_project.request`
+- `fab.add_to_project_batch.request`
 - `fab.export.request`
 - `fab.import_cached.request`
 - `fab.import_all_cached.request`
@@ -22,6 +27,14 @@ Initial allowlist:
 - `fab.launcher_import.request`
 - `fab.launcher_status.request`
 - `project.import.request`
+
+Read-only provider hooks are available for Launcher status, Fab search/library
+reads, download status, project import inventory, and the Fab callback listener
+probe. They mirror the direct MCP probes and include a local read plan in the
+result, so a provider can add an online/native implementation without changing
+the caller-facing contract. Their `side_effects_performed` result is always
+false; mutating operations remain the only operations that can report a
+mutation.
 
 The adapter also implements cached import locally. This path is intentionally
 separate from the native bridge: it reads Epic's local library index, requires

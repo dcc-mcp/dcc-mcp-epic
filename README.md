@@ -48,6 +48,10 @@ no generic UI automation fallback.
 - Hook contract introspection: `hook-contract` / `epic_hook_contract` returns
   the stable `epic.hook.v1` operation list, required fields, mutation flags,
   and confirmation defaults for self-owned integrations.
+- Read-only hook requests: Launcher status, Fab search/library/source reads,
+  download status, project import inventory, and the Fab callback listener
+  probe are available as typed `*_request` MCP tools and CLI commands. Each
+  request includes the local evidence plan and reports no mutation.
 - Runtime selection: `runtime-doctor` prefers a verified DCC-MCP sidecar when a
   compatible Python/MCP environment exists and otherwise selects the shared
   PyOxidizer bundle. Unreal's embedded Python is never reused.
@@ -98,6 +102,16 @@ uv run dcc-mcp-epic-cli engine-download-request 5.5 `
   --allowed-root F:\UE
 uv run dcc-mcp-epic-cli fab-search Arrow `
   --search-root C:\ProgramData\Epic --owned-only --downloaded-only
+uv run dcc-mcp-epic-cli fab-search-request Arrow `
+  --hook-manifest C:\path\hook.json --search-root C:\ProgramData\Epic
+uv run dcc-mcp-epic-cli fab-library-request `
+  --hook-manifest C:\path\hook.json --database C:\path\listings_v1.db
+uv run dcc-mcp-epic-cli fab-download-status-request <asset-id> `
+  --hook-manifest C:\path\hook.json --database C:\path\listings_v1.db
+uv run dcc-mcp-epic-cli fab-import-inventory-request P:\game-test\ue-arpg `
+  --allowed-root P:\game-test\ue-arpg --hook-manifest C:\path\hook.json
+uv run dcc-mcp-epic-cli fab-launcher-status-request `
+  --launcher-pid <EpicLauncherPID> --hook-manifest C:\path\hook.json
 uv run dcc-mcp-epic-cli fab-download-batch-request P:\game-test\ue-arpg `
   <asset-id-1> <asset-id-2> --allowed-root P:\game-test\ue-arpg `
   --hook-manifest C:\path\hook.json --owned
