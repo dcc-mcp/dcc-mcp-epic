@@ -63,12 +63,13 @@ class FabService:
 
     def capabilities(self) -> Dict[str, Any]:
         return {
-            "search": CapabilityState.UNAVAILABLE.value,
+            "search": CapabilityState.READ_ONLY.value,
             "library": CapabilityState.READ_ONLY.value,
             "library_sources": CapabilityState.READ_ONLY.value,
-            "download": CapabilityState.UNAVAILABLE.value,
+            "download": "available_if_declared_owned_hook",
+            "download_batch": "available_if_declared_owned_hook",
             "download_status": CapabilityState.READ_ONLY.value,
-            "export": CapabilityState.UNAVAILABLE.value,
+            "export": "available_if_declared_owned_hook",
             "import_cached": "available_if_owned_cached_or_source_download",
             "import_all_cached": "available_if_owned_cached_or_source_download",
             "import_inventory": CapabilityState.READ_ONLY.value,
@@ -233,11 +234,15 @@ class FabService:
                     bool(current.get("owned")),
                     bool(current.get("downloaded")),
                     bool(current.get("path")),
+                    bool(str(current.get("title") or "").strip()),
+                    bool(str(current.get("format") or "").strip()),
                 )
                 candidate_score = (
                     bool(candidate.get("owned")),
                     bool(candidate.get("downloaded")),
                     bool(candidate.get("path")),
+                    bool(str(candidate.get("title") or "").strip()),
+                    bool(str(candidate.get("format") or "").strip()),
                 )
                 if candidate_score > current_score:
                     merged[uid] = candidate
@@ -253,6 +258,67 @@ class FabService:
             "not_downloaded_count": sum(1 for item in assets if not item.get("downloaded")),
             "sources": sources,
             "assets": assets,
+        }
+
+    def search_local_library(
+        self,
+        query: str = "",
+        database_paths: Optional[Sequence[Union[str, Path]]] = None,
+        *,
+        search_roots: Optional[Sequence[Union[str, Path]]] = None,
+        category: str = "",
+        formats: Optional[Sequence[str]] = None,
+        owned_only: bool = False,
+        downloaded_only: bool = False,
+        max_depth: int = 6,
+    ) -> Dict[str, Any]:
+        """Search the merged local Fab indexes without contacting Fab."""
+
+        normalized_query = str(query or "").strip().casefold()
+        normalized_category = str(category or "").strip().casefold()
+        normalized_formats = {
+            str(value).strip().casefold() for value in (formats or []) if str(value).strip()
+        }
+        library = self.list_local_libraries(
+            database_paths,
+            search_roots=search_roots,
+            max_depth=max_depth,
+        )
+        matches = []
+        for asset in library.get("assets", []):
+            searchable = " ".join(
+                str(asset.get(key) or "")
+                for key in ("uid", "title", "category_name", "category_path")
+            ).casefold()
+            if normalized_query and normalized_query not in searchable:
+                continue
+            if normalized_category and normalized_category not in " ".join(
+                str(asset.get(key) or "")
+                for key in ("category_name", "category_path")
+            ).casefold():
+                continue
+            if (
+                normalized_formats
+                and str(asset.get("format") or "").casefold() not in normalized_formats
+            ):
+                continue
+            if owned_only and not asset.get("owned"):
+                continue
+            if downloaded_only and not asset.get("downloaded"):
+                continue
+            matches.append(asset)
+        return {
+            "operation": "fab.search",
+            "read_only": True,
+            "query": query,
+            "category": category,
+            "formats": sorted(normalized_formats),
+            "owned_only": owned_only,
+            "downloaded_only": downloaded_only,
+            "database_count": library.get("database_count", 0),
+            "result_count": len(matches),
+            "assets": matches,
+            "sources": library.get("sources", []),
         }
 
     def inspect_local_asset(

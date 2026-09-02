@@ -5,15 +5,16 @@ DCC-MCP. It follows the LiquiGen adapter pattern: exact runtime binding,
 versioned commands, read-before-write policy, resumable operation results, and
 no generic UI automation fallback.
 
-## Current 0.1 boundary
+## Current 0.2 boundary
 
 - Installed UE inventory: available, read-only, from Epic `.item` manifests.
 - UE installation integrity checks: available, read-only, verifies the editor binary.
 - UE 5.5 project verification: available, read-only.
 - UE install/update: plan-only; returns `human_required` until a supported
   native Launcher bridge is verified.
-- Fab search/download/export: capability probe and policy planning only. The
-  adapter never automates login, CAPTCHA, 2FA, purchase, or license acceptance.
+- Fab search: read-only local index search. Fab download/export are available
+  only through a declared user-owned hook; the adapter never automates login,
+  CAPTCHA, 2FA, purchase, or license acceptance.
 - Local Fab library index: available, read-only, when Epic's `listings_v1.db`
   exists.
 - Multi-source Fab inventory: available, read-only, merges explicitly selected
@@ -30,6 +31,17 @@ no generic UI automation fallback.
 - Typed Fab download request: policy-checks a free, owned asset and dispatches
   a fixed payload to a declared user-owned hook; completion still needs fresh
   library/project evidence.
+- Local Fab search: read-only full-text/category/format filters across merged
+  indexes, with owned/downloaded-only selectors.
+- Typed engine requests: install, update, download, verify, and launch hooks
+  expose scoped payloads while preserving read-before-write plans.
+- Typed Fab/project requests: export, one-asset import, batch import, and
+  project import hooks enforce explicit roots, formats, and confirmation.
+- Bounded batch download request: up to 100 free, owned asset IDs can be sent
+  to one user-owned hook, with per-asset verification required afterwards.
+- Hook contract introspection: `hook-contract` / `epic_hook_contract` returns
+  the stable `epic.hook.v1` operation list, required fields, mutation flags,
+  and confirmation defaults for self-owned integrations.
 - Runtime selection: `runtime-doctor` prefers a verified DCC-MCP sidecar when a
   compatible Python/MCP environment exists and otherwise selects the shared
   PyOxidizer bundle. Unreal's embedded Python is never reused.
@@ -48,6 +60,7 @@ uv build
 ```powershell
 uv run dcc-mcp-epic-cli capabilities
 uv run dcc-mcp-epic-cli runtime-doctor
+uv run dcc-mcp-epic-cli hook-contract
 uv run dcc-mcp-epic-cli engines
 uv run dcc-mcp-epic-cli project-verify P:\game-test\ue-arpg\RiftKidsARPG.uproject
 uv run dcc-mcp-epic-cli engine-verify
@@ -74,6 +87,16 @@ uv run dcc-mcp-epic-cli fab-project-inventory P:\game-test\ue-arpg `
 uv run dcc-mcp-epic-cli fab-launcher-probe --editor-pid <UnrealEditorPID>
 uv run dcc-mcp-epic-cli fab-launcher-status-probe --launcher-pid <EpicLauncherPID>
 uv run dcc-mcp-epic-cli engine-update-plan 5.5
+uv run dcc-mcp-epic-cli engine-download-request 5.5 `
+  --hook-manifest C:\path\hook.json --install-root F:\UE\UE_5.5 `
+  --allowed-root F:\UE
+uv run dcc-mcp-epic-cli fab-search Arrow `
+  --search-root C:\ProgramData\Epic --owned-only --downloaded-only
+uv run dcc-mcp-epic-cli fab-download-batch-request P:\game-test\ue-arpg `
+  <asset-id-1> <asset-id-2> --allowed-root P:\game-test\ue-arpg `
+  --hook-manifest C:\path\hook.json --owned
+uv run dcc-mcp-epic-cli fab-export-request <asset-id> P:\game-test\ue-arpg\Exports `
+  --allowed-root P:\game-test\ue-arpg --hook-manifest C:\path\hook.json --owned
 uv run python scripts/probe_mcp.py
 ```
 

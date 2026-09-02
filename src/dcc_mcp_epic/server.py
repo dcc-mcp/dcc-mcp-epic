@@ -8,6 +8,7 @@ try:
 except ImportError:  # pragma: no cover - exercised in a minimal Python 3.9 install
     FastMCP = None  # type: ignore[assignment,misc]
 
+from .hooks import hook_contract
 from .models import LauncherBinding
 from .providers.epic_launcher.manifest import DEFAULT_MANIFEST_ROOT
 from .providers.fab.bridge import (
@@ -33,6 +34,12 @@ def epic_runtime_doctor() -> Dict[str, Any]:
     """Report reusable DCC-MCP and standalone runtime options."""
 
     return runtime_doctor()
+
+
+def epic_hook_contract() -> Dict[str, Any]:
+    """Describe the versioned self-owned hook interface."""
+
+    return hook_contract()
 
 
 def epic_engine_list_installed(manifest_root: str = None) -> Dict[str, Any]:
@@ -76,6 +83,104 @@ def epic_engine_verify(manifest_root: Optional[str] = None) -> Dict[str, Any]:
     return _service.verify_engines(manifest_root or str(DEFAULT_MANIFEST_ROOT))
 
 
+def epic_engine_install_request(
+    target_version: str,
+    hook_manifest: str,
+    install_root: Optional[str] = None,
+    allowed_root: Optional[str] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch a user-owned engine install hook with scoped paths."""
+
+    return _service.engine_install_request(
+        target_version,
+        hook_manifest,
+        install_root=install_root,
+        allowed_root=allowed_root,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_engine_update_request(
+    target_version: str,
+    hook_manifest: str,
+    manifest_root: Optional[str] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch a user-owned engine update hook after a read-only plan."""
+
+    return _service.engine_update_request(
+        target_version,
+        hook_manifest,
+        manifest_root=manifest_root or str(DEFAULT_MANIFEST_ROOT),
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_engine_download_request(
+    target_version: str,
+    hook_manifest: str,
+    install_root: Optional[str] = None,
+    allowed_root: Optional[str] = None,
+    manifest_root: Optional[str] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch a user-owned engine download hook with scoped paths."""
+
+    return _service.engine_download_request(
+        target_version,
+        hook_manifest,
+        install_root=install_root,
+        allowed_root=allowed_root,
+        manifest_root=manifest_root or str(DEFAULT_MANIFEST_ROOT),
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_engine_verify_request(
+    hook_manifest: str,
+    manifest_root: Optional[str] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch a user-owned engine verification hook with local evidence."""
+
+    return _service.engine_verify_request(
+        hook_manifest,
+        manifest_root=manifest_root or str(DEFAULT_MANIFEST_ROOT),
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_engine_launch_request(
+    target_version: str,
+    project_path: str,
+    allowed_root: str,
+    hook_manifest: str,
+    manifest_root: Optional[str] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch a project-scoped user-owned engine launch hook."""
+
+    return _service.engine_launch_request(
+        target_version,
+        project_path,
+        allowed_root,
+        hook_manifest,
+        manifest_root=manifest_root or str(DEFAULT_MANIFEST_ROOT),
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 def epic_fab_library_list(database_path: Optional[str] = None) -> Dict[str, Any]:
     """Read the local Fab library index in read-only mode."""
 
@@ -107,6 +212,30 @@ def epic_fab_asset_inspect(asset_id: str, database_path: Optional[str] = None) -
         _service.fab.inspect_local_asset(asset_id, database_path)
         if database_path
         else _service.fab.inspect_local_asset(asset_id)
+    )
+
+
+def epic_fab_search(
+    query: str = "",
+    database_paths: Optional[List[str]] = None,
+    search_roots: Optional[List[str]] = None,
+    category: str = "",
+    formats: Optional[List[str]] = None,
+    owned_only: bool = False,
+    downloaded_only: bool = False,
+    max_depth: int = 6,
+) -> Dict[str, Any]:
+    """Search all caller-selected local Fab indexes read-only."""
+
+    return _service.fab.search_local_library(
+        query,
+        database_paths,
+        search_roots=search_roots,
+        category=category,
+        formats=formats,
+        owned_only=owned_only,
+        downloaded_only=downloaded_only,
+        max_depth=max_depth,
     )
 
 
@@ -161,6 +290,112 @@ def epic_fab_download_request(
         owned=owned,
         format=format,
         quality=quality,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_fab_export_request(
+    asset_id: str,
+    destination: str,
+    allowed_root: str,
+    hook_manifest: str,
+    expected_price: float = 0,
+    owned: bool = False,
+    format: str = "unreal-engine",
+    database_path: Optional[str] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch a policy-checked Fab export to a user-owned hook."""
+
+    return _service.fab_export_request(
+        asset_id,
+        destination,
+        allowed_root,
+        hook_manifest,
+        expected_price=expected_price,
+        owned=owned,
+        format=format,
+        database_path=database_path,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_fab_download_batch_request(
+    asset_ids: List[str],
+    project_path: str,
+    allowed_root: str,
+    hook_manifest: str,
+    expected_price: float = 0,
+    owned: bool = False,
+    format: str = "unreal-engine",
+    quality: str = "",
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch a bounded batch of free Fab downloads to a user-owned hook."""
+
+    return _service.fab_download_batch_request(
+        asset_ids,
+        project_path,
+        allowed_root,
+        hook_manifest,
+        expected_price=expected_price,
+        owned=owned,
+        format=format,
+        quality=quality,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_fab_import_cached_request(
+    asset_id: str,
+    project_path: str,
+    allowed_root: str,
+    hook_manifest: str,
+    database_path: Optional[str] = None,
+    cache_roots: Optional[List[str]] = None,
+    destination_subdir: str = "Fab",
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch one cached Fab import to a user-owned hook."""
+
+    return _service.fab_import_cached_request(
+        asset_id,
+        project_path,
+        allowed_root,
+        hook_manifest,
+        database_path=database_path,
+        cache_roots=cache_roots,
+        destination_subdir=destination_subdir,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_fab_import_all_cached_request(
+    project_path: str,
+    allowed_root: str,
+    hook_manifest: str,
+    database_paths: Optional[List[str]] = None,
+    cache_roots: Optional[List[str]] = None,
+    destination_subdir: str = "Fab",
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch a batch cached Fab import to a user-owned hook."""
+
+    return _service.fab_import_all_cached_request(
+        project_path,
+        allowed_root,
+        hook_manifest,
+        database_paths=database_paths,
+        cache_roots=cache_roots,
+        destination_subdir=destination_subdir,
         confirmed=confirmed,
         dry_run=dry_run,
     ).as_dict()
@@ -282,6 +517,26 @@ def epic_project_verify(project_path: str, expected_engine: str = "5.5") -> Dict
     return _service.verify_project(project_path, expected_engine)
 
 
+def epic_project_import_request(
+    project_path: str,
+    source: str,
+    allowed_root: str,
+    hook_manifest: str,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch a project-scoped import to a user-owned hook."""
+
+    return _service.project_import_request(
+        project_path,
+        source,
+        allowed_root,
+        hook_manifest,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 def epic_launcher_status(pid: int, hwnd: int, executable: str, version: str) -> Dict[str, Any]:
     """Bind to one exact Launcher process/window and return read-only status."""
 
@@ -318,17 +573,28 @@ if FastMCP is not None:
     for _tool in (
         epic_capabilities,
         epic_runtime_doctor,
+        epic_hook_contract,
         epic_engine_list_installed,
         epic_engine_update_plan,
         epic_engine_download_plan,
         epic_engine_launch_plan,
         epic_engine_verify,
+        epic_engine_install_request,
+        epic_engine_update_request,
+        epic_engine_download_request,
+        epic_engine_verify_request,
+        epic_engine_launch_request,
         epic_fab_library_list,
         epic_fab_library_sources,
         epic_fab_asset_inspect,
+        epic_fab_search,
         epic_fab_download_status,
         epic_fab_download_plan,
         epic_fab_download_request,
+        epic_fab_download_batch_request,
+        epic_fab_export_request,
+        epic_fab_import_cached_request,
+        epic_fab_import_all_cached_request,
         epic_fab_import_cached_asset,
         epic_fab_import_all_cached,
         epic_fab_project_inventory,
@@ -336,6 +602,7 @@ if FastMCP is not None:
         epic_fab_launcher_status_probe,
         epic_fab_launcher_import_request,
         epic_project_verify,
+        epic_project_import_request,
         epic_launcher_status,
         epic_hook_probe,
         epic_hook_invoke,

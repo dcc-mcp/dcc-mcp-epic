@@ -22,6 +22,7 @@ HOOK_OPERATIONS = frozenset(
         "fab.library.request",
         "fab.library_sources.request",
         "fab.download.request",
+        "fab.download_batch.request",
         "fab.download_status.request",
         "fab.export.request",
         "fab.import_cached.request",
@@ -39,6 +40,7 @@ MUTATING_HOOK_OPERATIONS = frozenset(
         "engine.download.request",
         "engine.launch.request",
         "fab.download.request",
+        "fab.download_batch.request",
         "fab.export.request",
         "fab.import_cached.request",
         "fab.import_all_cached.request",
@@ -46,6 +48,54 @@ MUTATING_HOOK_OPERATIONS = frozenset(
         "project.import.request",
     }
 )
+
+# Stable, machine-readable metadata for hook authors.  Keep this contract
+# deliberately small: it describes routing and minimum identity fields, not
+# private Epic APIs or credentials.
+HOOK_OPERATION_REQUIRED_FIELDS = {
+    "launcher.status": [],
+    "engine.install.request": ["target_version"],
+    "engine.update.request": ["target_version"],
+    "engine.download.request": ["target_version"],
+    "engine.verify.request": ["manifest_root"],
+    "engine.launch.request": ["target_version", "project_path"],
+    "fab.search.request": ["query"],
+    "fab.library.request": [],
+    "fab.library_sources.request": [],
+    "fab.download.request": ["asset_id", "project_path", "format"],
+    "fab.download_batch.request": ["assets", "project_path"],
+    "fab.download_status.request": ["asset_id"],
+    "fab.export.request": ["asset_id", "destination", "format"],
+    "fab.import_cached.request": ["asset_id", "project_path"],
+    "fab.import_all_cached.request": ["project_path"],
+    "fab.import_inventory.request": ["project_path"],
+    "fab.launcher_import.request": ["editor_pid", "editor_hwnd", "project_path"],
+    "fab.launcher_status.request": ["launcher_pid"],
+    "project.import.request": ["project_path", "source"],
+}
+
+
+def hook_contract() -> Dict[str, Any]:
+    """Return the versioned hook contract without reading or writing a file."""
+
+    operations = []
+    for operation in sorted(HOOK_OPERATIONS):
+        operations.append(
+            {
+                "name": operation,
+                "mutating": operation in MUTATING_HOOK_OPERATIONS,
+                "required_fields": list(HOOK_OPERATION_REQUIRED_FIELDS.get(operation, [])),
+                "confirmation_required_by_default": operation in MUTATING_HOOK_OPERATIONS,
+            }
+        )
+    return {
+        "protocol": HOOK_PROTOCOL,
+        "read_only": True,
+        "operations": operations,
+        "mutating_operations": sorted(MUTATING_HOOK_OPERATIONS),
+        "dry_run_default": True,
+        "executable_digest": "optional_sha256_manifest_field",
+    }
 
 
 @dataclass(frozen=True)

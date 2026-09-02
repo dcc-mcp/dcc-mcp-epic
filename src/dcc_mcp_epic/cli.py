@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("capabilities")
     sub.add_parser("runtime-doctor")
+    sub.add_parser("hook-contract")
     engines = sub.add_parser("engines")
     engines.add_argument("--manifest-root", default=None)
     engine_verify = sub.add_parser("engine-verify")
@@ -47,6 +48,13 @@ def build_parser() -> argparse.ArgumentParser:
     project = sub.add_parser("project-verify")
     project.add_argument("project_path")
     project.add_argument("--engine", default="5.5")
+    project_import = sub.add_parser("project-import-request")
+    project_import.add_argument("project_path")
+    project_import.add_argument("source")
+    project_import.add_argument("--allowed-root", required=True)
+    project_import.add_argument("--hook-manifest", required=True)
+    project_import.add_argument("--confirmed", action="store_true")
+    project_import.add_argument("--execute", action="store_true")
     plan = sub.add_parser("engine-update-plan")
     plan.add_argument("target_version")
     plan.add_argument("--manifest-root", default=None)
@@ -57,6 +65,40 @@ def build_parser() -> argparse.ArgumentParser:
     launch.add_argument("target_version")
     launch.add_argument("project_path")
     launch.add_argument("--manifest-root", default=None)
+    engine_install = sub.add_parser("engine-install-request")
+    engine_install.add_argument("target_version")
+    engine_install.add_argument("--hook-manifest", required=True)
+    engine_install.add_argument("--install-root", default=None)
+    engine_install.add_argument("--allowed-root", default=None)
+    engine_install.add_argument("--confirmed", action="store_true")
+    engine_install.add_argument("--execute", action="store_true")
+    engine_update = sub.add_parser("engine-update-request")
+    engine_update.add_argument("target_version")
+    engine_update.add_argument("--hook-manifest", required=True)
+    engine_update.add_argument("--manifest-root", default=None)
+    engine_update.add_argument("--confirmed", action="store_true")
+    engine_update.add_argument("--execute", action="store_true")
+    engine_download = sub.add_parser("engine-download-request")
+    engine_download.add_argument("target_version")
+    engine_download.add_argument("--hook-manifest", required=True)
+    engine_download.add_argument("--install-root", default=None)
+    engine_download.add_argument("--allowed-root", default=None)
+    engine_download.add_argument("--manifest-root", default=None)
+    engine_download.add_argument("--confirmed", action="store_true")
+    engine_download.add_argument("--execute", action="store_true")
+    engine_verify_request = sub.add_parser("engine-verify-request")
+    engine_verify_request.add_argument("--hook-manifest", required=True)
+    engine_verify_request.add_argument("--manifest-root", default=None)
+    engine_verify_request.add_argument("--confirmed", action="store_true")
+    engine_verify_request.add_argument("--execute", action="store_true")
+    engine_launch_request = sub.add_parser("engine-launch-request")
+    engine_launch_request.add_argument("target_version")
+    engine_launch_request.add_argument("project_path")
+    engine_launch_request.add_argument("--allowed-root", required=True)
+    engine_launch_request.add_argument("--hook-manifest", required=True)
+    engine_launch_request.add_argument("--manifest-root", default=None)
+    engine_launch_request.add_argument("--confirmed", action="store_true")
+    engine_launch_request.add_argument("--execute", action="store_true")
     fab = sub.add_parser("fab-download-plan")
     fab.add_argument("asset_id")
     fab.add_argument("project_path")
@@ -74,9 +116,71 @@ def build_parser() -> argparse.ArgumentParser:
     fab_request.add_argument("--quality", default="")
     fab_request.add_argument("--confirmed", action="store_true")
     fab_request.add_argument("--execute", action="store_true")
+    fab_download_batch = sub.add_parser("fab-download-batch-request")
+    fab_download_batch.add_argument("project_path")
+    fab_download_batch.add_argument("asset_ids", nargs="+", help="One or more Fab asset ids")
+    fab_download_batch.add_argument("--allowed-root", required=True)
+    fab_download_batch.add_argument("--hook-manifest", required=True)
+    fab_download_batch.add_argument("--expected-price", type=float, default=0)
+    fab_download_batch.add_argument("--owned", action="store_true")
+    fab_download_batch.add_argument("--format", default="unreal-engine")
+    fab_download_batch.add_argument("--quality", default="")
+    fab_download_batch.add_argument("--confirmed", action="store_true")
+    fab_download_batch.add_argument("--execute", action="store_true")
+    fab_export = sub.add_parser("fab-export-request")
+    fab_export.add_argument("asset_id")
+    fab_export.add_argument("destination")
+    fab_export.add_argument("--allowed-root", required=True)
+    fab_export.add_argument("--hook-manifest", required=True)
+    fab_export.add_argument("--expected-price", type=float, default=0)
+    fab_export.add_argument("--owned", action="store_true")
+    fab_export.add_argument("--format", default="unreal-engine")
+    fab_export.add_argument("--database", default=None)
+    fab_export.add_argument("--confirmed", action="store_true")
+    fab_export.add_argument("--execute", action="store_true")
+    fab_import_request = sub.add_parser("fab-import-cached-request")
+    fab_import_request.add_argument("asset_id")
+    fab_import_request.add_argument("project_path")
+    fab_import_request.add_argument("--allowed-root", required=True)
+    fab_import_request.add_argument("--hook-manifest", required=True)
+    fab_import_request.add_argument("--database", default=None)
+    fab_import_request.add_argument(
+        "--cache-root", dest="cache_roots", action="append", default=None
+    )
+    fab_import_request.add_argument("--destination-subdir", default="Fab")
+    fab_import_request.add_argument("--confirmed", action="store_true")
+    fab_import_request.add_argument("--execute", action="store_true")
+    fab_import_all_request = sub.add_parser("fab-import-all-cached-request")
+    fab_import_all_request.add_argument("project_path")
+    fab_import_all_request.add_argument("--allowed-root", required=True)
+    fab_import_all_request.add_argument("--hook-manifest", required=True)
+    fab_import_all_request.add_argument(
+        "--database", dest="databases", action="append", default=None
+    )
+    fab_import_all_request.add_argument(
+        "--cache-root", dest="cache_roots", action="append", default=None
+    )
+    fab_import_all_request.add_argument("--destination-subdir", default="Fab")
+    fab_import_all_request.add_argument("--confirmed", action="store_true")
+    fab_import_all_request.add_argument("--execute", action="store_true")
     fab_asset = sub.add_parser("fab-asset-inspect")
     fab_asset.add_argument("asset_id")
     fab_asset.add_argument("--database", default=None)
+    fab_search = sub.add_parser("fab-search")
+    fab_search.add_argument("query", nargs="?", default="")
+    fab_search.add_argument(
+        "--database", dest="databases", action="append", default=None,
+        help="Explicit listings_v1.db path; repeat for multiple indexes",
+    )
+    fab_search.add_argument(
+        "--search-root", dest="search_roots", action="append", default=None,
+        help="Root to scan read-only for listings_v1.db; repeat as needed",
+    )
+    fab_search.add_argument("--category", default="")
+    fab_search.add_argument("--format", dest="formats", action="append", default=None)
+    fab_search.add_argument("--owned-only", action="store_true")
+    fab_search.add_argument("--downloaded-only", action="store_true")
+    fab_search.add_argument("--max-depth", type=int, default=6)
     fab_download_status = sub.add_parser("fab-download-status")
     fab_download_status.add_argument("asset_id")
     fab_download_status.add_argument("--database", default=None)
@@ -152,6 +256,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         _dump(service.capabilities())
     elif args.command == "runtime-doctor":
         _dump(runtime_doctor())
+    elif args.command == "hook-contract":
+        from .hooks import hook_contract
+
+        _dump(hook_contract())
     elif args.command == "engines":
         result = (
             service.list_engines(args.manifest_root)
@@ -184,6 +292,60 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.command == "engine-launch-plan":
         root = args.manifest_root or str(DEFAULT_MANIFEST_ROOT)
         _dump(service.engine_launch_plan(args.target_version, args.project_path, root).as_dict())
+    elif args.command == "engine-install-request":
+        _dump(
+            service.engine_install_request(
+                args.target_version,
+                args.hook_manifest,
+                install_root=args.install_root,
+                allowed_root=args.allowed_root,
+                manifest_root=args.manifest_root or str(DEFAULT_MANIFEST_ROOT),
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "engine-update-request":
+        _dump(
+            service.engine_update_request(
+                args.target_version,
+                args.hook_manifest,
+                manifest_root=args.manifest_root or str(DEFAULT_MANIFEST_ROOT),
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "engine-download-request":
+        _dump(
+            service.engine_download_request(
+                args.target_version,
+                args.hook_manifest,
+                install_root=args.install_root,
+                allowed_root=args.allowed_root,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "engine-verify-request":
+        _dump(
+            service.engine_verify_request(
+                args.hook_manifest,
+                manifest_root=args.manifest_root or str(DEFAULT_MANIFEST_ROOT),
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "engine-launch-request":
+        _dump(
+            service.engine_launch_request(
+                args.target_version,
+                args.project_path,
+                args.allowed_root,
+                args.hook_manifest,
+                manifest_root=args.manifest_root or str(DEFAULT_MANIFEST_ROOT),
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
     elif args.command == "fab-download-plan":
         _dump(
             service.fab.plan_download(
@@ -209,9 +371,37 @@ def main(argv: Optional[List[str]] = None) -> int:
                 dry_run=not args.execute,
             ).as_dict()
         )
+    elif args.command == "fab-download-batch-request":
+        _dump(
+            service.fab_download_batch_request(
+                args.asset_ids,
+                args.project_path,
+                args.allowed_root,
+                args.hook_manifest,
+                expected_price=args.expected_price,
+                owned=args.owned,
+                format=args.format,
+                quality=args.quality,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
     elif args.command == "fab-asset-inspect":
         database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
         _dump(service.fab.inspect_local_asset(args.asset_id, database))
+    elif args.command == "fab-search":
+        _dump(
+            service.fab.search_local_library(
+                args.query,
+                args.databases,
+                search_roots=args.search_roots,
+                category=args.category,
+                formats=args.formats,
+                owned_only=args.owned_only,
+                downloaded_only=args.downloaded_only,
+                max_depth=args.max_depth,
+            )
+        )
     elif args.command == "fab-download-status":
         database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
         _dump(
@@ -220,6 +410,48 @@ def main(argv: Optional[List[str]] = None) -> int:
                 database,
                 cache_roots=args.cache_roots,
             )
+        )
+    elif args.command == "fab-export-request":
+        _dump(
+            service.fab_export_request(
+                args.asset_id,
+                args.destination,
+                args.allowed_root,
+                args.hook_manifest,
+                expected_price=args.expected_price,
+                owned=args.owned,
+                format=args.format,
+                database_path=args.database,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "fab-import-cached-request":
+        _dump(
+            service.fab_import_cached_request(
+                args.asset_id,
+                args.project_path,
+                args.allowed_root,
+                args.hook_manifest,
+                database_path=args.database,
+                cache_roots=args.cache_roots,
+                destination_subdir=args.destination_subdir,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "fab-import-all-cached-request":
+        _dump(
+            service.fab_import_all_cached_request(
+                args.project_path,
+                args.allowed_root,
+                args.hook_manifest,
+                database_paths=args.databases,
+                cache_roots=args.cache_roots,
+                destination_subdir=args.destination_subdir,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
         )
     elif args.command == "fab-import-cached":
         database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
@@ -253,6 +485,17 @@ def main(argv: Optional[List[str]] = None) -> int:
                 args.allowed_root,
                 destination_subdir=args.destination_subdir,
             )
+        )
+    elif args.command == "project-import-request":
+        _dump(
+            service.project_import_request(
+                args.project_path,
+                args.source,
+                args.allowed_root,
+                args.hook_manifest,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
         )
     elif args.command == "fab-launcher-probe":
         _dump(probe_fab_launcher(args.editor_pid, args.port))

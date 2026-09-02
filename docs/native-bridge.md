@@ -9,14 +9,18 @@ Initial allowlist:
 - `launcher.status`
 - `engine.install.request`
 - `engine.update.request`
+- `engine.download.request`
 - `engine.verify.request`
+- `engine.launch.request`
 - `fab.download.request`
+- `fab.download_batch.request`
 - `fab.export.request`
 - `fab.import_cached.request`
 - `fab.import_all_cached.request`
 - `fab.import_inventory.request`
 - `fab.launcher_import.request`
 - `fab.launcher_status.request`
+- `project.import.request`
 
 The adapter also implements cached import locally. This path is intentionally
 separate from the native bridge: it reads Epic's local library index, requires
@@ -42,6 +46,17 @@ bridge. It rejects non-zero prices and unverified ownership, sends only the
 asset/project/format/quality payload, defaults to dry-run, and reports the
 request as incomplete until the local Fab index and project inventory are
 re-read.
+
+`epic_fab_download_batch_request` applies the same free/owned policy to a
+bounded list (maximum 100 IDs) and sends one deterministic batch payload. The
+hook must report its own job/result; callers must re-read every asset's
+`epic_fab_download_status` and the project import inventory before treating the
+batch as complete.
+
+`epic_hook_contract` (or `hook-contract` in the CLI) is the source of truth for
+operation names, required identity fields, mutation flags, and confirmation
+defaults. Hook authors should consume that contract instead of depending on
+private Epic Launcher/Fab implementation details.
 
 ## Self-owned hook bridge
 

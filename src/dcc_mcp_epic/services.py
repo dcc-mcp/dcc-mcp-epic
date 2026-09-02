@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Sequence, Union
 
 from .hooks import HOOK_OPERATIONS, invoke_hook, load_hook_manifest, probe_hook
 from .models import CapabilityState, LauncherBinding, OperationResult
+from .policy import require_free_asset, resolve_allowed_project
 from .providers.epic_launcher.manifest import DEFAULT_MANIFEST_ROOT, list_engine_installs
 from .providers.epic_launcher.runtime import bind_launcher
 from .providers.fab.service import FabService
@@ -24,6 +25,11 @@ class EpicService:
             "engine.download": CapabilityState.HUMAN_REQUIRED.value,
             "engine.launch": CapabilityState.READ_ONLY.value,
             "engine.verify": CapabilityState.READ_ONLY.value,
+            "engine.install.request": "available_if_declared_hook",
+            "engine.update.request": "available_if_declared_hook",
+            "engine.download.request": "available_if_declared_hook",
+            "engine.verify.request": "available_if_declared_hook",
+            "engine.launch.request": "available_if_declared_hook",
             "fab": self.fab.capabilities(),
             "project.verify": CapabilityState.READ_ONLY.value,
             "hooks": {
@@ -162,6 +168,231 @@ class EpicService:
             dry_run=dry_run,
         )
 
+    @staticmethod
+    def _scoped_path(
+        value: Union[str, Path], allowed_root: Optional[Union[str, Path]], field: str
+    ) -> tuple[Optional[Path], Optional[OperationResult]]:
+        """Resolve a hook path only when its caller supplied an approved root."""
+
+        if allowed_root is None:
+            return None, OperationResult(
+                CapabilityState.HUMAN_REQUIRED,
+                "hook.request",
+                f"{field} requires an explicit allowed_root",
+                {"field": field, "side_effects_performed": False},
+            )
+        try:
+            return resolve_allowed_project(value, allowed_root), None
+        except ValueError as exc:
+            return None, OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "hook.request",
+                str(exc),
+                {"field": field, "side_effects_performed": False},
+            )
+
+    def _typed_hook_request(
+        self,
+        operation: str,
+        hook_manifest: Union[str, Path],
+        payload: Dict[str, Any],
+        *,
+        confirmed: bool,
+        dry_run: bool,
+        plan: Optional[OperationResult] = None,
+    ) -> OperationResult:
+        """Dispatch a declared operation while retaining the preflight plan."""
+
+        result = self.hook_invoke(
+            hook_manifest,
+            operation,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+        )
+        details = dict(result.details)
+        details["payload"] = payload if dry_run else details.get("payload")
+        if plan is not None:
+            details["plan"] = plan.as_dict()
+        details.setdefault("side_effects_performed", False)
+        return OperationResult(
+            result.state,
+            operation,
+            f"typed {operation} hook request processed; verify the resulting state",
+            details,
+        )
+
+    def engine_install_request(
+        self,
+        target_version: str,
+        hook_manifest: Union[str, Path],
+        *,
+        install_root: Optional[Union[str, Path]] = None,
+        allowed_root: Optional[Union[str, Path]] = None,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        if allowed_root is None:
+            return OperationResult(
+                CapabilityState.HUMAN_REQUIRED,
+                "engine.install.request",
+                "engine install requires an explicit allowed_root",
+                {"side_effects_performed": False},
+            )
+        payload: Dict[str, Any] = {"target_version": str(target_version)}
+        if install_root is not None:
+            path, error = self._scoped_path(install_root, allowed_root, "install_root")
+            if error:
+                return OperationResult(
+                    error.state,
+                    "engine.install.request",
+                    error.message,
+                    error.details,
+                )
+            payload["install_root"] = str(path)
+        else:
+            payload["allowed_root"] = str(Path(allowed_root).expanduser().resolve())
+        return self._typed_hook_request(
+            "engine.install.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+        )
+
+    def engine_update_request(
+        self,
+        target_version: str,
+        hook_manifest: Union[str, Path],
+        *,
+        manifest_root: Union[str, Path] = DEFAULT_MANIFEST_ROOT,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        plan = self.engine_update_plan(target_version, manifest_root)
+        payload = {
+            "target_version": str(target_version),
+            "manifest_root": str(Path(manifest_root).expanduser().resolve()),
+        }
+        return self._typed_hook_request(
+            "engine.update.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=plan,
+        )
+
+    def engine_download_request(
+        self,
+        target_version: str,
+        hook_manifest: Union[str, Path],
+        *,
+        install_root: Optional[Union[str, Path]] = None,
+        allowed_root: Optional[Union[str, Path]] = None,
+        manifest_root: Union[str, Path] = DEFAULT_MANIFEST_ROOT,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        if allowed_root is None:
+            return OperationResult(
+                CapabilityState.HUMAN_REQUIRED,
+                "engine.download.request",
+                "engine download requires an explicit allowed_root",
+                {"side_effects_performed": False},
+            )
+        plan = self.engine_download_plan(target_version, manifest_root)
+        payload: Dict[str, Any] = {
+            "target_version": str(target_version),
+            "manifest_root": str(Path(manifest_root).expanduser().resolve()),
+        }
+        if install_root is not None:
+            path, error = self._scoped_path(install_root, allowed_root, "install_root")
+            if error:
+                return OperationResult(
+                    error.state,
+                    "engine.download.request",
+                    error.message,
+                    error.details,
+                )
+            payload["install_root"] = str(path)
+        else:
+            payload["allowed_root"] = str(Path(allowed_root).expanduser().resolve())
+        return self._typed_hook_request(
+            "engine.download.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=plan,
+        )
+
+    def engine_verify_request(
+        self,
+        hook_manifest: Union[str, Path],
+        *,
+        manifest_root: Union[str, Path] = DEFAULT_MANIFEST_ROOT,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        payload = {"manifest_root": str(Path(manifest_root).expanduser().resolve())}
+        return self._typed_hook_request(
+            "engine.verify.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "engine.verify",
+                "local engine verification can be read before invoking the hook",
+                self.verify_engines(manifest_root),
+            ),
+        )
+
+    def engine_launch_request(
+        self,
+        target_version: str,
+        project_path: Union[str, Path],
+        allowed_root: Union[str, Path],
+        hook_manifest: Union[str, Path],
+        *,
+        manifest_root: Union[str, Path] = DEFAULT_MANIFEST_ROOT,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        try:
+            project = resolve_allowed_project(project_path, allowed_root)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "engine.launch.request",
+                str(exc),
+                {"side_effects_performed": False},
+            )
+        plan = self.engine_launch_plan(target_version, project, manifest_root)
+        if plan.state is CapabilityState.UNAVAILABLE:
+            return OperationResult(
+                plan.state,
+                "engine.launch.request",
+                plan.message,
+                plan.details,
+            )
+        payload = {
+            "target_version": str(target_version),
+            "project_path": str(project),
+            "allowed_root": str(Path(allowed_root).expanduser().resolve()),
+            "manifest_root": str(Path(manifest_root).expanduser().resolve()),
+        }
+        return self._typed_hook_request(
+            "engine.launch.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=plan,
+        )
+
     def fab_download_request(
         self,
         asset_id: str,
@@ -195,6 +426,7 @@ class EpicService:
             "obj",
             "usd",
             "usdz",
+            "texture-set",
         }:
             return OperationResult(
                 CapabilityState.UNAVAILABLE,
@@ -237,4 +469,292 @@ class EpicService:
             "fab.download",
             "Fab download hook request processed; completion requires fresh evidence",
             details,
+        )
+
+    def fab_download_batch_request(
+        self,
+        asset_ids: Sequence[str],
+        project_path: Union[str, Path],
+        allowed_root: Union[str, Path],
+        hook_manifest: Union[str, Path],
+        *,
+        expected_price: Union[int, float] = 0,
+        owned: bool = False,
+        format: str = "unreal-engine",
+        quality: str = "",
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Dispatch a bounded batch of free, owned Fab downloads to a hook."""
+
+        try:
+            project = resolve_allowed_project(project_path, allowed_root)
+            require_free_asset(expected_price, owned)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.HUMAN_REQUIRED,
+                "fab.download_batch.request",
+                str(exc),
+                {"side_effects_performed": False},
+            )
+        values = [str(item).strip() for item in asset_ids if str(item).strip()]
+        if not values:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.download_batch.request",
+                "asset_ids must contain at least one non-empty id",
+                {"side_effects_performed": False},
+            )
+        if len(values) > 100:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.download_batch.request",
+                "asset_ids is limited to 100 entries per request",
+                {"count": len(values), "side_effects_performed": False},
+            )
+        if len(set(values)) != len(values):
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.download_batch.request",
+                "asset_ids must not contain duplicates",
+                {"side_effects_performed": False},
+            )
+        allowed_formats = {
+            "unreal-engine",
+            "fbx",
+            "glb",
+            "gltf",
+            "obj",
+            "usd",
+            "usdz",
+            "texture-set",
+        }
+        if format not in allowed_formats:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.download_batch.request",
+                "unsupported Fab download format",
+                {"format": format, "side_effects_performed": False},
+            )
+        payload = {
+            "project_path": str(project),
+            "allowed_root": str(Path(allowed_root).expanduser().resolve()),
+            "assets": [
+                {
+                    "asset_id": asset_id,
+                    "expected_price": expected_price,
+                    "owned": True,
+                    "format": format,
+                    "quality": quality,
+                }
+                for asset_id in values
+            ],
+            "verification_required": (
+                "re-read each asset's Fab download status and project inventory"
+            ),
+        }
+        return self._typed_hook_request(
+            "fab.download_batch.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+        )
+
+    def fab_export_request(
+        self,
+        asset_id: str,
+        destination: Union[str, Path],
+        allowed_root: Union[str, Path],
+        hook_manifest: Union[str, Path],
+        *,
+        expected_price: Union[int, float] = 0,
+        owned: bool = False,
+        format: str = "unreal-engine",
+        database_path: Optional[Union[str, Path]] = None,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Dispatch a policy-checked export to a user-owned hook."""
+
+        try:
+            target = resolve_allowed_project(destination, allowed_root)
+            require_free_asset(expected_price, owned)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.HUMAN_REQUIRED,
+                "fab.export.request",
+                str(exc),
+                {"asset_id": asset_id, "side_effects_performed": False},
+            )
+        allowed_formats = {
+            "unreal-engine",
+            "fbx",
+            "glb",
+            "gltf",
+            "obj",
+            "usd",
+            "usdz",
+            "texture-set",
+        }
+        if format not in allowed_formats:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.export.request",
+                "unsupported Fab export format",
+                {"asset_id": asset_id, "format": format, "side_effects_performed": False},
+            )
+        payload: Dict[str, Any] = {
+            "asset_id": str(asset_id),
+            "destination": str(target),
+            "allowed_root": str(Path(allowed_root).expanduser().resolve()),
+            "expected_price": expected_price,
+            "owned": True,
+            "format": format,
+        }
+        if database_path is not None:
+            payload["database_path"] = str(Path(database_path).expanduser().resolve())
+        return self._typed_hook_request(
+            "fab.export.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+        )
+
+    def fab_import_cached_request(
+        self,
+        asset_id: str,
+        project_path: Union[str, Path],
+        allowed_root: Union[str, Path],
+        hook_manifest: Union[str, Path],
+        *,
+        database_path: Optional[Union[str, Path]] = None,
+        cache_roots: Optional[Sequence[Union[str, Path]]] = None,
+        destination_subdir: str = "Fab",
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Dispatch one cached import to a declared importer hook."""
+
+        try:
+            project = resolve_allowed_project(project_path, allowed_root)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.import_cached.request",
+                str(exc),
+                {"asset_id": asset_id, "side_effects_performed": False},
+            )
+        if Path(destination_subdir).is_absolute() or ".." in Path(destination_subdir).parts:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.import_cached.request",
+                "destination_subdir must be relative and cannot traverse",
+                {"asset_id": asset_id, "side_effects_performed": False},
+            )
+        payload: Dict[str, Any] = {
+            "asset_id": str(asset_id),
+            "project_path": str(project),
+            "allowed_root": str(Path(allowed_root).expanduser().resolve()),
+            "destination_subdir": destination_subdir,
+        }
+        if database_path is not None:
+            payload["database_path"] = str(Path(database_path).expanduser().resolve())
+        if cache_roots:
+            payload["cache_roots"] = [
+                str(Path(item).expanduser().resolve()) for item in cache_roots
+            ]
+        return self._typed_hook_request(
+            "fab.import_cached.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+        )
+
+    def fab_import_all_cached_request(
+        self,
+        project_path: Union[str, Path],
+        allowed_root: Union[str, Path],
+        hook_manifest: Union[str, Path],
+        *,
+        database_paths: Optional[Sequence[Union[str, Path]]] = None,
+        cache_roots: Optional[Sequence[Union[str, Path]]] = None,
+        destination_subdir: str = "Fab",
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Dispatch a batch cached import to a declared importer hook."""
+
+        try:
+            project = resolve_allowed_project(project_path, allowed_root)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.import_all_cached.request",
+                str(exc),
+                {"side_effects_performed": False},
+            )
+        if Path(destination_subdir).is_absolute() or ".." in Path(destination_subdir).parts:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.import_all_cached.request",
+                "destination_subdir must be relative and cannot traverse",
+                {"side_effects_performed": False},
+            )
+        payload: Dict[str, Any] = {
+            "project_path": str(project),
+            "allowed_root": str(Path(allowed_root).expanduser().resolve()),
+            "destination_subdir": destination_subdir,
+        }
+        if database_paths:
+            payload["database_paths"] = [
+                str(Path(item).expanduser().resolve()) for item in database_paths
+            ]
+        if cache_roots:
+            payload["cache_roots"] = [
+                str(Path(item).expanduser().resolve()) for item in cache_roots
+            ]
+        return self._typed_hook_request(
+            "fab.import_all_cached.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+        )
+
+    def project_import_request(
+        self,
+        project_path: Union[str, Path],
+        source: Union[str, Path],
+        allowed_root: Union[str, Path],
+        hook_manifest: Union[str, Path],
+        *,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Dispatch a project-scoped import while constraining both paths."""
+
+        try:
+            project = resolve_allowed_project(project_path, allowed_root)
+            source_path = resolve_allowed_project(source, allowed_root)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "project.import.request",
+                str(exc),
+                {"side_effects_performed": False},
+            )
+        payload = {
+            "project_path": str(project),
+            "source": str(source_path),
+            "allowed_root": str(Path(allowed_root).expanduser().resolve()),
+        }
+        return self._typed_hook_request(
+            "project.import.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
         )

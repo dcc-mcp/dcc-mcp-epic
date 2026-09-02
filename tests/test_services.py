@@ -1,7 +1,65 @@
+import hashlib
 import json
+import sys
 
 from dcc_mcp_epic.models import CapabilityState
 from dcc_mcp_epic.services import EpicService
+
+
+def _hook_manifest(tmp_path, operations):
+    hook = tmp_path / "hook.py"
+    hook.write_text(
+        "import json,sys; print(json.dumps({'received': json.load(sys.stdin)['payload']}))",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "hook.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "protocol": "epic.hook.v1",
+                "name": "typed-hook",
+                "version": "1.0.0",
+                "command": [sys.executable, str(hook)],
+                "operations": operations,
+                "requires_confirmation": [
+                    item for item in operations if not item.endswith(".status")
+                ],
+                "sha256": hashlib.sha256(
+                    (__import__("pathlib").Path(sys.executable)).read_bytes()
+                ).hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def _fab_db(path, rows):
+    import sqlite3
+
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "CREATE TABLE local_listing (uid TEXT, title TEXT, category_name TEXT, category_path TEXT)"
+    )
+    connection.execute(
+        "CREATE TABLE download_meta (listing_uid TEXT, format TEXT, quality TEXT, "
+        "path TEXT, cache_size INTEGER)"
+    )
+    connection.execute("CREATE TABLE listing_acquisition (listing_uid TEXT, user_uid TEXT)")
+    for uid, title, category, fmt, cache_path, owned in rows:
+        connection.execute(
+            "INSERT INTO local_listing VALUES (?, ?, ?, '')", (uid, title, category)
+        )
+        connection.execute(
+            "INSERT INTO download_meta VALUES (?, ?, '', ?, 1)",
+            (uid, fmt, str(cache_path) if cache_path else ""),
+        )
+        if owned:
+            connection.execute(
+                "INSERT INTO listing_acquisition VALUES (?, 'user-1')", (uid,)
+            )
+    connection.commit()
+    connection.close()
 
 
 def test_engine_update_plan_is_explicitly_no_side_effect(tmp_path):
@@ -377,3 +435,116 @@ def test_fab_download_request_dispatches_only_after_free_owned_policy(tmp_path):
     assert executed.state is CapabilityState.AVAILABLE
     assert executed.details["side_effects_performed"] is True
     assert executed.details["hook"]["details"]["response"]["received"]["format"] == "unreal-engine"
+
+
+def test_fab_search_filters_merged_local_indexes(tmp_path):
+    first = tmp_path / "first.db"
+    second = tmp_path / "second.db"
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    _fab_db(
+        first,
+        [
+            ("asset-1", "Free Arrow Trail", "VFX", "unreal-engine", cache, True),
+            ("asset-2", "Medieval House", "Environment", "fbx", None, True),
+        ],
+    )
+    _fab_db(
+        second,
+        [("asset-1", "Free Arrow Trail", "VFX", "unreal-engine", cache, True)],
+    )
+    result = EpicService().fab.search_local_library(
+        "arrow", [first, second], formats=["unreal-engine"], downloaded_only=True
+    )
+    assert result["read_only"] is True
+    assert result["result_count"] == 1
+    assert result["assets"][0]["uid"] == "asset-1"
+
+
+def test_hook_contract_describes_mutation_and_required_fields():
+    from dcc_mcp_epic.hooks import hook_contract
+
+    contract = hook_contract()
+    operations = {item["name"]: item for item in contract["operations"]}
+    assert contract["protocol"] == "epic.hook.v1"
+    assert operations["fab.download.request"]["mutating"] is True
+    assert operations["fab.download.request"]["required_fields"] == [
+        "asset_id",
+        "project_path",
+        "format",
+    ]
+    assert operations["fab.download_batch.request"]["mutating"] is True
+    assert operations["fab.library_sources.request"]["mutating"] is False
+
+
+def test_typed_engine_download_request_is_dry_run_by_default(tmp_path):
+    manifest = _hook_manifest(tmp_path, ["engine.download.request"])
+    result = EpicService().engine_download_request(
+        "5.5",
+        manifest,
+        allowed_root=tmp_path,
+        install_root=tmp_path / "UE_5.5",
+        confirmed=True,
+    )
+    assert result.state is CapabilityState.READ_ONLY
+    assert result.operation == "engine.download.request"
+    assert result.details["payload"]["target_version"] == "5.5"
+
+
+def test_typed_fab_download_batch_is_bounded_and_dry_run(tmp_path):
+    manifest = _hook_manifest(tmp_path, ["fab.download_batch.request"])
+    project = tmp_path / "project"
+    project.mkdir()
+    result = EpicService().fab_download_batch_request(
+        ["asset-1", "asset-2"],
+        project,
+        tmp_path,
+        manifest,
+        owned=True,
+        confirmed=True,
+    )
+    assert result.state is CapabilityState.READ_ONLY
+    assert result.operation == "fab.download_batch.request"
+    assert [item["asset_id"] for item in result.details["payload"]["assets"]] == [
+        "asset-1",
+        "asset-2",
+    ]
+
+
+def test_typed_fab_download_batch_rejects_duplicates(tmp_path):
+    manifest = tmp_path / "missing-hook.json"
+    result = EpicService().fab_download_batch_request(
+        ["asset-1", "asset-1"], tmp_path, tmp_path, manifest, owned=True
+    )
+    assert result.state is CapabilityState.UNAVAILABLE
+    assert "duplicates" in result.message
+
+
+def test_typed_engine_install_request_requires_scope_for_install_root(tmp_path):
+    manifest = tmp_path / "missing-hook.json"
+    result = EpicService().engine_install_request(
+        "5.5", manifest, install_root=tmp_path / "UE"
+    )
+    assert result.state is CapabilityState.HUMAN_REQUIRED
+    assert "allowed_root" in result.message
+
+
+def test_typed_fab_export_request_enforces_free_owned_policy(tmp_path):
+    manifest = tmp_path / "missing-hook.json"
+    result = EpicService().fab_export_request(
+        "asset-1", tmp_path / "out", tmp_path, manifest, owned=False
+    )
+    assert result.state is CapabilityState.HUMAN_REQUIRED
+    assert "ownership" in result.message
+
+
+def test_project_import_request_rejects_source_traversal(tmp_path):
+    manifest = tmp_path / "missing-hook.json"
+    result = EpicService().project_import_request(
+        tmp_path / "project",
+        tmp_path.parent / "outside.fbx",
+        tmp_path,
+        manifest,
+    )
+    assert result.state is CapabilityState.UNAVAILABLE
+    assert "outside allowed root" in result.message
