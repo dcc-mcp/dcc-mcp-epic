@@ -213,6 +213,9 @@ def send_import_request(
         owner = _window_owner(editor_hwnd)
         if owner != editor_pid:
             raise ValueError(f"editor HWND {editor_hwnd} is not owned by PID {editor_pid}")
+        command_line = " ".join(process.cmdline())
+        project_token = os.path.normcase(str(project.resolve()))
+        project_bound = project_token in os.path.normcase(command_line)
     except (OSError, psutil.Error, ValueError) as exc:
         return OperationResult(
             CapabilityState.UNAVAILABLE,
@@ -228,6 +231,7 @@ def send_import_request(
         "project_path": str(project),
         "port": port,
         "payload": evidence,
+        "project_binding_verified": project_bound,
         "status_port": DEFAULT_FAB_STATUS_PORT,
         "side_effects_performed": False,
     }
@@ -243,6 +247,13 @@ def send_import_request(
             CapabilityState.READ_ONLY,
             operation,
             "FabLauncher import request validated; dry-run performed",
+            details,
+        )
+    if not project_bound:
+        return OperationResult(
+            CapabilityState.HUMAN_REQUIRED,
+            operation,
+            "UnrealEditor command line is not bound to the requested project",
             details,
         )
     if not confirmed:
