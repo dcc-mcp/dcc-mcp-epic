@@ -239,6 +239,22 @@ def invoke_hook(
             "hook operation requires explicit confirmation",
             {"hook": spec.name, "dry_run": True, "side_effects_performed": False},
         )
+    missing_fields = [
+        field
+        for field in HOOK_OPERATION_REQUIRED_FIELDS.get(operation, [])
+        if field not in payload or payload[field] in (None, "", [])
+    ]
+    if missing_fields:
+        return OperationResult(
+            CapabilityState.UNAVAILABLE,
+            operation,
+            "hook payload is missing required fields",
+            {
+                "hook": spec.name,
+                "missing_fields": missing_fields,
+                "side_effects_performed": False,
+            },
+        )
     evidence = probe_hook(spec)
     if spec.sha256 is not None and not evidence["sha256_verified"]:
         return OperationResult(

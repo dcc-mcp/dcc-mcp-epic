@@ -57,7 +57,8 @@ no generic UI automation fallback.
   `fab-add-to-project-batch-request` for UE content.
 - Hook contract introspection: `hook-contract` / `epic_hook_contract` returns
   the stable `epic.hook.v1` operation list, required fields, mutation flags,
-  and confirmation defaults for self-owned integrations.
+  and confirmation defaults for self-owned integrations. Generic
+  `hook-invoke` calls are rejected when a required field is missing.
 - Read-only hook requests: Launcher status, Fab search/library/source/detail
   reads, single/batch download status, project import inventory, and the Fab
   callback listener probe are available as typed `*_request` MCP tools and CLI

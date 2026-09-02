@@ -907,6 +907,8 @@ class EpicService:
         else:
             executable = None
         payload: Dict[str, Any] = {
+            "expected_price": expected_price,
+            "free_listing": True,
             "assets": [
                 {
                     "asset_id": asset_id,

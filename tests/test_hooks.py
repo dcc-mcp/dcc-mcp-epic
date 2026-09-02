@@ -46,7 +46,11 @@ def test_hook_execute_uses_fixed_argv_and_json(tmp_path):
     result = invoke_hook(
         spec,
         "fab.download.request",
-        {"asset_id": "a"},
+        {
+            "asset_id": "a",
+            "project_path": str(tmp_path),
+            "format": "fbx",
+        },
         confirmed=True,
         dry_run=False,
     )
@@ -76,3 +80,15 @@ def test_mutating_operation_must_declare_confirmation(tmp_path):
 
     with pytest.raises(ValueError, match="must require confirmation"):
         load_hook_manifest(path)
+
+
+def test_hook_invoke_enforces_contract_required_fields(tmp_path):
+    spec = load_hook_manifest(_manifest(tmp_path))
+    result = invoke_hook(
+        spec,
+        "fab.download.request",
+        {"asset_id": "a"},
+        confirmed=True,
+    )
+    assert result.state is CapabilityState.UNAVAILABLE
+    assert result.details["missing_fields"] == ["project_path", "format"]
