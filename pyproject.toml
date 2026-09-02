@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dcc-mcp-epic"
+version = "0.1.0"
+description = "Typed local-first Epic Games Launcher, Fab, and Unreal project adapter for DCC-MCP"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "loonghao", email = "hal.long@outlook.com" }]
+keywords = ["epic", "fab", "unreal", "launcher", "mcp", "dcc", "automation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = ["psutil>=5.9,<8.0"]
+
+[project.urls]
+Homepage = "https://github.com/dcc-mcp/dcc-mcp-epic"
+Repository = "https://github.com/dcc-mcp/dcc-mcp-epic"
+Issues = "https://github.com/dcc-mcp/dcc-mcp-epic/issues"
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.0,<2.0; python_version >= '3.10'"]
+dev = [
+    "build>=1.2",
+    "mcp>=1.0,<2.0; python_version >= '3.10'",
+    "pytest>=8",
+    "ruff>=0.8",
+]
+
+[project.scripts]
+dcc-mcp-epic = "dcc_mcp_epic.server:main"
+dcc-mcp-epic-cli = "dcc_mcp_epic.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["dcc_mcp_epic*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+exclude = [".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
