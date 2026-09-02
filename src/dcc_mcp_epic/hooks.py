@@ -19,6 +19,7 @@ HOOK_OPERATIONS = frozenset(
         "engine.verify.request",
         "engine.launch.request",
         "fab.search.request",
+        "fab.asset_detail.request",
         "fab.library.request",
         "fab.library_sources.request",
         "fab.library_sync.request",
@@ -29,6 +30,7 @@ HOOK_OPERATIONS = frozenset(
         "fab.add_to_project.request",
         "fab.add_to_project_batch.request",
         "fab.download_status.request",
+        "fab.download_status_batch.request",
         "fab.export.request",
         "fab.import_cached.request",
         "fab.import_all_cached.request",
@@ -70,6 +72,7 @@ HOOK_OPERATION_REQUIRED_FIELDS = {
     "engine.verify.request": ["manifest_root"],
     "engine.launch.request": ["target_version", "project_path"],
     "fab.search.request": ["query"],
+    "fab.asset_detail.request": ["asset_id"],
     "fab.library.request": [],
     "fab.library_sources.request": [],
     "fab.library_sync.request": ["launcher_pid", "allowed_root"],
@@ -80,6 +83,7 @@ HOOK_OPERATION_REQUIRED_FIELDS = {
     "fab.add_to_project.request": ["asset_id", "project_path"],
     "fab.add_to_project_batch.request": ["assets", "project_path"],
     "fab.download_status.request": ["asset_id"],
+    "fab.download_status_batch.request": ["assets"],
     "fab.export.request": ["asset_id", "destination", "format"],
     "fab.import_cached.request": ["asset_id", "project_path"],
     "fab.import_all_cached.request": ["project_path"],
@@ -168,8 +172,7 @@ def load_hook_manifest(path: Union[str, Path]) -> HookSpec:
     )
     if missing_confirmations:
         raise ValueError(
-            "mutating hook operations must require confirmation: "
-            f"{missing_confirmations}"
+            f"mutating hook operations must require confirmation: {missing_confirmations}"
         )
     digest = data.get("sha256")
     if digest is not None:

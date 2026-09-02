@@ -269,6 +269,30 @@ def epic_fab_search_request(
     ).as_dict()
 
 
+def epic_fab_asset_detail_request(
+    asset_id: str,
+    hook_manifest: str,
+    database_paths: Optional[List[str]] = None,
+    search_roots: Optional[List[str]] = None,
+    cache_roots: Optional[List[str]] = None,
+    max_depth: int = 6,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Route one local Fab asset detail read through a user-owned hook."""
+
+    return _service.fab_asset_detail_request(
+        asset_id,
+        hook_manifest,
+        database_paths=database_paths,
+        search_roots=search_roots,
+        cache_roots=cache_roots,
+        max_depth=max_depth,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 def epic_fab_download_status(
     asset_id: str,
     database_path: Optional[str] = None,
@@ -277,9 +301,7 @@ def epic_fab_download_status(
     """Re-read local Fab state to verify a hook download landed in cache."""
 
     if database_path:
-        return _service.fab.inspect_download_state(
-            asset_id, database_path, cache_roots=cache_roots
-        )
+        return _service.fab.inspect_download_state(asset_id, database_path, cache_roots=cache_roots)
     return _service.fab.inspect_download_state(asset_id, cache_roots=cache_roots)
 
 
@@ -408,6 +430,30 @@ def epic_fab_download_status_request(
         hook_manifest,
         database_path=database_path,
         cache_roots=cache_roots,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_fab_download_status_batch_request(
+    asset_ids: List[str],
+    hook_manifest: str,
+    database_paths: Optional[List[str]] = None,
+    search_roots: Optional[List[str]] = None,
+    cache_roots: Optional[List[str]] = None,
+    max_depth: int = 6,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Route bounded multi-asset Fab download evidence through a hook."""
+
+    return _service.fab_download_status_batch_request(
+        asset_ids,
+        hook_manifest,
+        database_paths=database_paths,
+        search_roots=search_roots,
+        cache_roots=cache_roots,
+        max_depth=max_depth,
         confirmed=confirmed,
         dry_run=dry_run,
     ).as_dict()
@@ -854,6 +900,7 @@ if FastMCP is not None:
         epic_fab_library_request,
         epic_fab_library_sources,
         epic_fab_library_sources_request,
+        epic_fab_asset_detail_request,
         epic_fab_add_to_library_request,
         epic_fab_add_to_library_batch_request,
         epic_fab_library_sync_request,
@@ -862,6 +909,7 @@ if FastMCP is not None:
         epic_fab_search_request,
         epic_fab_download_status,
         epic_fab_download_status_request,
+        epic_fab_download_status_batch_request,
         epic_fab_download_plan,
         epic_fab_download_request,
         epic_fab_download_batch_request,

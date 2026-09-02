@@ -45,7 +45,8 @@ def build_parser() -> argparse.ArgumentParser:
     fab_add_library.add_argument("--hook-manifest", required=True)
     fab_add_library.add_argument("--expected-price", type=float, default=0)
     fab_add_library.add_argument(
-        "--free-listing", action="store_true",
+        "--free-listing",
+        action="store_true",
         help="Explicitly assert that the current listing is free before account mutation",
     )
     fab_add_library.add_argument("--launcher-pid", type=int, default=None)
@@ -60,7 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
     fab_add_library_batch.add_argument("--hook-manifest", required=True)
     fab_add_library_batch.add_argument("--expected-price", type=float, default=0)
     fab_add_library_batch.add_argument(
-        "--free-listing", action="store_true",
+        "--free-listing",
+        action="store_true",
         help="Explicitly assert that the current listings are free before account mutation",
     )
     fab_add_library_batch.add_argument("--launcher-pid", type=int, default=None)
@@ -73,33 +75,51 @@ def build_parser() -> argparse.ArgumentParser:
     fab_library_sync.add_argument("--allowed-root", required=True)
     fab_library_sync.add_argument("--hook-manifest", required=True)
     fab_library_sync.add_argument(
-        "--database", dest="databases", action="append", default=None,
+        "--database",
+        dest="databases",
+        action="append",
+        default=None,
         help="Approved listings_v1.db path; repeat for multiple indexes",
     )
     fab_library_sync.add_argument(
-        "--cache-root", dest="cache_roots", action="append", default=None,
+        "--cache-root",
+        dest="cache_roots",
+        action="append",
+        default=None,
         help="Approved VaultCache root; repeat for multiple locations",
     )
     fab_library_sync.add_argument("--confirmed", action="store_true")
     fab_library_sync.add_argument("--execute", action="store_true")
     fab_sources = sub.add_parser("fab-library-sources")
     fab_sources.add_argument(
-        "--database", dest="databases", action="append", default=None,
+        "--database",
+        dest="databases",
+        action="append",
+        default=None,
         help="Explicit listings_v1.db path; repeat for multiple Epic cache indexes",
     )
     fab_sources.add_argument(
-        "--search-root", dest="search_roots", action="append", default=None,
+        "--search-root",
+        dest="search_roots",
+        action="append",
+        default=None,
         help="Root to scan read-only for listings_v1.db; repeat as needed",
     )
     fab_sources.add_argument("--max-depth", type=int, default=6)
     fab_sources_request = sub.add_parser("fab-library-sources-request")
     fab_sources_request.add_argument("--hook-manifest", required=True)
     fab_sources_request.add_argument(
-        "--database", dest="databases", action="append", default=None,
+        "--database",
+        dest="databases",
+        action="append",
+        default=None,
         help="Explicit listings_v1.db path; repeat for multiple Epic cache indexes",
     )
     fab_sources_request.add_argument(
-        "--search-root", dest="search_roots", action="append", default=None,
+        "--search-root",
+        dest="search_roots",
+        action="append",
+        default=None,
         help="Root to scan read-only for listings_v1.db; repeat as needed",
     )
     fab_sources_request.add_argument("--max-depth", type=int, default=6)
@@ -246,14 +266,47 @@ def build_parser() -> argparse.ArgumentParser:
     fab_asset = sub.add_parser("fab-asset-inspect")
     fab_asset.add_argument("asset_id")
     fab_asset.add_argument("--database", default=None)
+    fab_asset_request = sub.add_parser("fab-asset-detail-request")
+    fab_asset_request.add_argument("asset_id")
+    fab_asset_request.add_argument("--hook-manifest", required=True)
+    fab_asset_request.add_argument(
+        "--database",
+        dest="databases",
+        action="append",
+        default=None,
+        help="Explicit listings_v1.db path; repeat for multiple indexes",
+    )
+    fab_asset_request.add_argument(
+        "--search-root",
+        dest="search_roots",
+        action="append",
+        default=None,
+        help="Root to scan read-only for listings_v1.db; repeat as needed",
+    )
+    fab_asset_request.add_argument(
+        "--cache-root",
+        dest="cache_roots",
+        action="append",
+        default=None,
+        help="Approved VaultCache root; repeat for multiple locations",
+    )
+    fab_asset_request.add_argument("--max-depth", type=int, default=6)
+    fab_asset_request.add_argument("--confirmed", action="store_true")
+    fab_asset_request.add_argument("--execute", action="store_true")
     fab_search = sub.add_parser("fab-search")
     fab_search.add_argument("query", nargs="?", default="")
     fab_search.add_argument(
-        "--database", dest="databases", action="append", default=None,
+        "--database",
+        dest="databases",
+        action="append",
+        default=None,
         help="Explicit listings_v1.db path; repeat for multiple indexes",
     )
     fab_search.add_argument(
-        "--search-root", dest="search_roots", action="append", default=None,
+        "--search-root",
+        dest="search_roots",
+        action="append",
+        default=None,
         help="Root to scan read-only for listings_v1.db; repeat as needed",
     )
     fab_search.add_argument("--category", default="")
@@ -265,11 +318,17 @@ def build_parser() -> argparse.ArgumentParser:
     fab_search_request.add_argument("query", nargs="?", default="")
     fab_search_request.add_argument("--hook-manifest", required=True)
     fab_search_request.add_argument(
-        "--database", dest="databases", action="append", default=None,
+        "--database",
+        dest="databases",
+        action="append",
+        default=None,
         help="Explicit listings_v1.db path; repeat for multiple indexes",
     )
     fab_search_request.add_argument(
-        "--search-root", dest="search_roots", action="append", default=None,
+        "--search-root",
+        dest="search_roots",
+        action="append",
+        default=None,
         help="Root to scan read-only for listings_v1.db; repeat as needed",
     )
     fab_search_request.add_argument("--category", default="")
@@ -283,7 +342,10 @@ def build_parser() -> argparse.ArgumentParser:
     fab_download_status.add_argument("asset_id")
     fab_download_status.add_argument("--database", default=None)
     fab_download_status.add_argument(
-        "--cache-root", dest="cache_roots", action="append", default=None,
+        "--cache-root",
+        dest="cache_roots",
+        action="append",
+        default=None,
         help="Approved VaultCache root; repeat for multiple Epic cache locations",
     )
     fab_download_status_request = sub.add_parser("fab-download-status-request")
@@ -291,18 +353,53 @@ def build_parser() -> argparse.ArgumentParser:
     fab_download_status_request.add_argument("--hook-manifest", required=True)
     fab_download_status_request.add_argument("--database", default=None)
     fab_download_status_request.add_argument(
-        "--cache-root", dest="cache_roots", action="append", default=None,
+        "--cache-root",
+        dest="cache_roots",
+        action="append",
+        default=None,
         help="Approved VaultCache root; repeat for multiple Epic cache locations",
     )
     fab_download_status_request.add_argument("--confirmed", action="store_true")
     fab_download_status_request.add_argument("--execute", action="store_true")
+    fab_download_status_batch_request = sub.add_parser("fab-download-status-batch-request")
+    fab_download_status_batch_request.add_argument(
+        "asset_ids", nargs="+", help="One or more Fab asset ids (max 100)"
+    )
+    fab_download_status_batch_request.add_argument("--hook-manifest", required=True)
+    fab_download_status_batch_request.add_argument(
+        "--database",
+        dest="databases",
+        action="append",
+        default=None,
+        help="Explicit listings_v1.db path; repeat for multiple indexes",
+    )
+    fab_download_status_batch_request.add_argument(
+        "--search-root",
+        dest="search_roots",
+        action="append",
+        default=None,
+        help="Root to scan read-only for listings_v1.db; repeat as needed",
+    )
+    fab_download_status_batch_request.add_argument(
+        "--cache-root",
+        dest="cache_roots",
+        action="append",
+        default=None,
+        help="Approved VaultCache root; repeat for multiple locations",
+    )
+    fab_download_status_batch_request.add_argument("--max-depth", type=int, default=6)
+    fab_download_status_batch_request.add_argument("--confirmed", action="store_true")
+    fab_download_status_batch_request.add_argument("--execute", action="store_true")
     fab_import = sub.add_parser("fab-import-cached")
     fab_import.add_argument("asset_id")
     fab_import.add_argument("project_path")
     fab_import.add_argument("--allowed-root", required=True)
     fab_import.add_argument("--database", default=None)
     fab_import.add_argument(
-        "--cache-root", dest="cache_roots", action="append", default=None,
+        "--cache-root",
+        dest="cache_roots",
+        action="append",
+        default=None,
         help="Approved VaultCache root; repeat to allow multiple Epic cache locations",
     )
     fab_import.add_argument("--destination-subdir", default="Fab")
@@ -312,11 +409,17 @@ def build_parser() -> argparse.ArgumentParser:
     fab_import_all.add_argument("project_path")
     fab_import_all.add_argument("--allowed-root", required=True)
     fab_import_all.add_argument(
-        "--database", dest="databases", action="append", default=None,
+        "--database",
+        dest="databases",
+        action="append",
+        default=None,
         help="Explicit listings_v1.db path; repeat for multiple Epic cache indexes",
     )
     fab_import_all.add_argument(
-        "--cache-root", dest="cache_roots", action="append", default=None,
+        "--cache-root",
+        dest="cache_roots",
+        action="append",
+        default=None,
         help="Approved VaultCache root; repeat to allow multiple Epic cache locations",
     )
     fab_import_all.add_argument("--confirmed", action="store_true")
@@ -604,6 +707,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.command == "fab-asset-inspect":
         database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
         _dump(service.fab.inspect_local_asset(args.asset_id, database))
+    elif args.command == "fab-asset-detail-request":
+        _dump(
+            service.fab_asset_detail_request(
+                args.asset_id,
+                args.hook_manifest,
+                database_paths=args.databases,
+                search_roots=args.search_roots,
+                cache_roots=args.cache_roots,
+                max_depth=args.max_depth,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
     elif args.command == "fab-search":
         _dump(
             service.fab.search_local_library(
@@ -649,6 +765,19 @@ def main(argv: Optional[List[str]] = None) -> int:
                 args.hook_manifest,
                 database_path=args.database,
                 cache_roots=args.cache_roots,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "fab-download-status-batch-request":
+        _dump(
+            service.fab_download_status_batch_request(
+                args.asset_ids,
+                args.hook_manifest,
+                database_paths=args.databases,
+                search_roots=args.search_roots,
+                cache_roots=args.cache_roots,
+                max_depth=args.max_depth,
                 confirmed=args.confirmed,
                 dry_run=not args.execute,
             ).as_dict()

@@ -25,8 +25,12 @@ no generic UI automation fallback.
 - Fab library sync: available through a scoped user-owned hook keyed to the
   Launcher PID and approved cache/index roots; the adapter never edits Epic's
   databases directly.
+- Fab asset detail: read-only listing metadata plus cache evidence for one
+  asset, available through a typed hook.
 - Fab download status: available, read-only, re-reads ownership, path and
   cache evidence after a user-owned download hook.
+- Fab batch download status: bounded (up to 100 IDs), merges multiple local
+  indexes and returns per-asset evidence through a typed hook.
 - Cached Fab import: available for already-owned/downloaded Unreal Content;
   dry-run, explicit confirmation, VaultCache-root enforcement, no-overwrite
   behavior, and per-file provenance hashes are built in. FBX/GLTF/OBJ/USD
@@ -54,9 +58,10 @@ no generic UI automation fallback.
 - Hook contract introspection: `hook-contract` / `epic_hook_contract` returns
   the stable `epic.hook.v1` operation list, required fields, mutation flags,
   and confirmation defaults for self-owned integrations.
-- Read-only hook requests: Launcher status, Fab search/library/source reads,
-  download status, project import inventory, and the Fab callback listener
-  probe are available as typed `*_request` MCP tools and CLI commands. Each
+- Read-only hook requests: Launcher status, Fab search/library/source/detail
+  reads, single/batch download status, project import inventory, and the Fab
+  callback listener probe are available as typed `*_request` MCP tools and CLI
+  commands. Each
   request includes the local evidence plan and reports no mutation.
 - Runtime selection: `runtime-doctor` prefers a verified DCC-MCP sidecar when a
   compatible Python/MCP environment exists and otherwise selects the shared
@@ -89,6 +94,8 @@ uv run dcc-mcp-epic-cli fab-download-status <asset-id> `
   --database F:\UE\EpicGamesLauncher\VaultCache\FabLibrary\listings_v1.db `
   --cache-root F:\UE\EpicGamesLauncher\VaultCache
 uv run dcc-mcp-epic-cli fab-asset-inspect b8ff3ab4-0e81-4335-bbf0-fea15f6fcdfc
+uv run dcc-mcp-epic-cli fab-asset-detail-request <asset-id> `
+  --hook-manifest C:\path\hook.json --search-root C:\ProgramData\Epic
 uv run dcc-mcp-epic-cli fab-download-request <asset-id> P:\game-test\ue-arpg `
   --allowed-root P:\game-test\ue-arpg --hook-manifest C:\path\hook.json `
   --owned
@@ -128,6 +135,9 @@ uv run dcc-mcp-epic-cli fab-library-sync-request `
   --cache-root F:\UE\EpicGamesLauncher\VaultCache
 uv run dcc-mcp-epic-cli fab-download-status-request <asset-id> `
   --hook-manifest C:\path\hook.json --database C:\path\listings_v1.db
+uv run dcc-mcp-epic-cli fab-download-status-batch-request `
+  <asset-id-1> <asset-id-2> --hook-manifest C:\path\hook.json `
+  --search-root C:\ProgramData\Epic --cache-root C:\ProgramData\Epic\EpicGamesLauncher\VaultCache
 uv run dcc-mcp-epic-cli fab-import-inventory-request P:\game-test\ue-arpg `
   --allowed-root P:\game-test\ue-arpg --hook-manifest C:\path\hook.json
 uv run dcc-mcp-epic-cli fab-launcher-status-request `

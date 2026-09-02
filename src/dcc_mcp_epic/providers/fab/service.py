@@ -65,6 +65,8 @@ class FabService:
         return {
             "search": CapabilityState.READ_ONLY.value,
             "search_request": "available_if_declared_read_only_hook",
+            "asset_detail": CapabilityState.READ_ONLY.value,
+            "asset_detail_request": "available_if_declared_read_only_hook",
             "library": CapabilityState.READ_ONLY.value,
             "library_request": "available_if_declared_read_only_hook",
             "library_sources": CapabilityState.READ_ONLY.value,
@@ -78,6 +80,7 @@ class FabService:
             "add_to_project_batch": "available_if_declared_owned_hook",
             "download_status": CapabilityState.READ_ONLY.value,
             "download_status_request": "available_if_declared_read_only_hook",
+            "download_status_batch_request": "available_if_declared_read_only_hook",
             "export": "available_if_declared_owned_hook",
             "import_cached": "available_if_owned_cached_or_source_download",
             "import_all_cached": "available_if_owned_cached_or_source_download",
@@ -109,9 +112,7 @@ class FabService:
             if connection.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='listing_acquisition'"
             ).fetchone():
-                acquisition_join = (
-                    "LEFT JOIN listing_acquisition AS a ON a.listing_uid = l.uid"
-                )
+                acquisition_join = "LEFT JOIN listing_acquisition AS a ON a.listing_uid = l.uid"
                 owned_select = "CASE WHEN a.listing_uid IS NULL THEN 0 ELSE 1 END AS owned"
             query = f"""
                 SELECT l.uid, l.title, l.category_name, l.category_path,
@@ -123,9 +124,9 @@ class FabService:
             """
             for row in connection.execute(query):
                 asset = dict(row)
-                asset["downloaded"] = bool(asset.get("path")) and Path(
-                    str(asset.get("path"))
-                ).exists()
+                asset["downloaded"] = (
+                    bool(asset.get("path")) and Path(str(asset.get("path"))).exists()
+                )
                 asset["owned"] = bool(asset.get("owned"))
                 assets.append(asset)
         except sqlite3.Error as exc:
@@ -303,10 +304,13 @@ class FabService:
             ).casefold()
             if normalized_query and normalized_query not in searchable:
                 continue
-            if normalized_category and normalized_category not in " ".join(
-                str(asset.get(key) or "")
-                for key in ("category_name", "category_path")
-            ).casefold():
+            if (
+                normalized_category
+                and normalized_category
+                not in " ".join(
+                    str(asset.get(key) or "") for key in ("category_name", "category_path")
+                ).casefold()
+            ):
                 continue
             if (
                 normalized_formats
@@ -403,6 +407,106 @@ class FabService:
         else:
             result["state"] = "not_owned"
         return result
+
+    def inspect_download_states(
+        self,
+        asset_ids: Sequence[str],
+        database_paths: Optional[Sequence[Union[str, Path]]] = None,
+        *,
+        search_roots: Optional[Sequence[Union[str, Path]]] = None,
+        cache_roots: Optional[Sequence[Union[str, Path]]] = None,
+        max_depth: int = 6,
+    ) -> Dict[str, Any]:
+        """Read download evidence for a bounded set of assets.
+
+        Multiple Launcher profiles can leave more than one ``listings_v1.db``
+        on disk. We inspect every explicitly selected/discovered index and
+        retain the strongest evidence per asset, preferring a verified
+        downloaded path over ownership-only or missing-index results.
+        """
+
+        values = [str(item).strip() for item in asset_ids if str(item).strip()]
+        if not values:
+            return {
+                "operation": "fab.download_status_batch",
+                "read_only": True,
+                "assets": [],
+                "error": "asset_ids must contain at least one non-empty id",
+            }
+        if len(values) > 100:
+            return {
+                "operation": "fab.download_status_batch",
+                "read_only": True,
+                "assets": [],
+                "error": "asset_ids is limited to 100 entries per request",
+            }
+        if len(set(values)) != len(values):
+            return {
+                "operation": "fab.download_status_batch",
+                "read_only": True,
+                "assets": [],
+                "error": "asset_ids must not contain duplicates",
+            }
+        if database_paths is None:
+            discovered = self.discover_library_databases(search_roots, max_depth=max_depth)
+            if discovered.get("error"):
+                return discovered
+            paths = [Path(item) for item in discovered.get("databases", [])]
+            if not paths:
+                paths = [DEFAULT_FAB_LIBRARY_DB]
+        else:
+            paths = self._database_path_list(database_paths=database_paths)
+        rank = {
+            "downloaded": 4,
+            "owned_path_missing": 3,
+            "owned_not_downloaded": 2,
+            "path_outside_approved_cache": 1,
+            "not_owned": 1,
+            "not_indexed": 0,
+        }
+        selected: Dict[str, Dict[str, Any]] = {}
+        candidate_counts: Dict[str, int] = {asset_id: 0 for asset_id in values}
+        for database_path in paths:
+            for asset_id in values:
+                status = self.inspect_download_state(
+                    asset_id, database_path, cache_roots=cache_roots
+                )
+                if status.get("state") != "not_indexed":
+                    candidate_counts[asset_id] += 1
+                current = selected.get(asset_id)
+                if current is None or rank.get(status.get("state", ""), 0) > rank.get(
+                    current.get("state", ""), 0
+                ):
+                    selected[asset_id] = status
+        assets = []
+        for asset_id in values:
+            status = dict(
+                selected.get(
+                    asset_id,
+                    {
+                        "operation": "fab.download_status",
+                        "read_only": True,
+                        "asset_id": asset_id,
+                        "state": "not_indexed",
+                        "downloaded": False,
+                        "owned": False,
+                        "path": None,
+                        "path_exists": False,
+                        "cache_path_verified": False,
+                    },
+                )
+            )
+            status["candidate_count"] = candidate_counts[asset_id]
+            assets.append(status)
+        return {
+            "operation": "fab.download_status_batch",
+            "read_only": True,
+            "database_count": len(paths),
+            "asset_count": len(assets),
+            "downloaded_count": sum(1 for item in assets if item.get("downloaded")),
+            "owned_count": sum(1 for item in assets if item.get("owned")),
+            "assets": assets,
+        }
 
     def plan_download(
         self,
@@ -525,9 +629,7 @@ class FabService:
             )
         approved_cache_roots = [DEFAULT_FAB_CACHE_ROOT.expanduser().resolve()]
         if cache_roots:
-            approved_cache_roots.extend(
-                Path(item).expanduser().resolve() for item in cache_roots
-            )
+            approved_cache_roots.extend(Path(item).expanduser().resolve() for item in cache_roots)
         unique_cache_roots: List[Path] = []
         seen_cache_roots = set()
         for cache_root in approved_cache_roots:
@@ -536,9 +638,7 @@ class FabService:
                 unique_cache_roots.append(cache_root)
                 seen_cache_roots.add(key)
         source = Path(str(source_value)).expanduser().resolve()
-        if not any(
-            self._is_relative_to(source, cache_root) for cache_root in unique_cache_roots
-        ):
+        if not any(self._is_relative_to(source, cache_root) for cache_root in unique_cache_roots):
             return OperationResult(
                 CapabilityState.UNAVAILABLE,
                 "fab.import_cached_asset",
@@ -594,9 +694,9 @@ class FabService:
             )
 
         title = str(asset.get("title") or asset_id)
-        slug = "".join(
-            char if char.isalnum() or char in "-_" else "_" for char in title
-        ).strip("._")
+        slug = "".join(char if char.isalnum() or char in "-_" else "_" for char in title).strip(
+            "._"
+        )
         slug = (slug or "asset")[:80]
         destination = project / "Content" / destination_subdir / f"{slug}-{asset_id[:8]}"
         try:

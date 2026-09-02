@@ -48,17 +48,13 @@ def _fab_db(path, rows):
     )
     connection.execute("CREATE TABLE listing_acquisition (listing_uid TEXT, user_uid TEXT)")
     for uid, title, category, fmt, cache_path, owned in rows:
-        connection.execute(
-            "INSERT INTO local_listing VALUES (?, ?, ?, '')", (uid, title, category)
-        )
+        connection.execute("INSERT INTO local_listing VALUES (?, ?, ?, '')", (uid, title, category))
         connection.execute(
             "INSERT INTO download_meta VALUES (?, ?, '', ?, 1)",
             (uid, fmt, str(cache_path) if cache_path else ""),
         )
         if owned:
-            connection.execute(
-                "INSERT INTO listing_acquisition VALUES (?, 'user-1')", (uid,)
-            )
+            connection.execute("INSERT INTO listing_acquisition VALUES (?, 'user-1')", (uid,))
     connection.commit()
     connection.close()
 
@@ -177,8 +173,7 @@ def test_fab_download_status_rechecks_cache_path(tmp_path):
     database = tmp_path / "listings_v1.db"
     connection = sqlite3.connect(database)
     connection.execute(
-        "CREATE TABLE local_listing (uid TEXT, title TEXT, category_name TEXT, "
-        "category_path TEXT)"
+        "CREATE TABLE local_listing (uid TEXT, title TEXT, category_name TEXT, category_path TEXT)"
     )
     connection.execute(
         "CREATE TABLE download_meta (listing_uid TEXT, format TEXT, quality TEXT, "
@@ -192,9 +187,7 @@ def test_fab_download_status_rechecks_cache_path(tmp_path):
     connection.execute("INSERT INTO listing_acquisition VALUES ('asset-1', 'user-1')")
     connection.commit()
     connection.close()
-    result = EpicService().fab.inspect_download_state(
-        "asset-1", database, cache_roots=[cache_root]
-    )
+    result = EpicService().fab.inspect_download_state("asset-1", database, cache_roots=[cache_root])
     assert result["read_only"] is True
     assert result["state"] == "downloaded"
     assert result["cache_path_verified"] is True
@@ -377,9 +370,7 @@ def test_project_import_inventory_verifies_manifest_hashes(tmp_path):
             }
         ],
     }
-    (destination / ".dcc-mcp-fab.json").write_text(
-        json.dumps(manifest), encoding="utf-8"
-    )
+    (destination / ".dcc-mcp-fab.json").write_text(json.dumps(manifest), encoding="utf-8")
     service = EpicService()
     inventory = service.fab.project_import_inventory(project, tmp_path)
     assert inventory["all_valid"] is True
@@ -419,13 +410,9 @@ def test_fab_download_request_dispatches_only_after_free_owned_policy(tmp_path):
     project = tmp_path / "project"
     (project / "Content").mkdir(parents=True)
     service = EpicService()
-    blocked = service.fab_download_request(
-        "asset-1", project, tmp_path, manifest, owned=False
-    )
+    blocked = service.fab_download_request("asset-1", project, tmp_path, manifest, owned=False)
     assert blocked.state is CapabilityState.HUMAN_REQUIRED
-    dry_run = service.fab_download_request(
-        "asset-1", project, tmp_path, manifest, owned=True
-    )
+    dry_run = service.fab_download_request("asset-1", project, tmp_path, manifest, owned=True)
     assert dry_run.state is CapabilityState.HUMAN_REQUIRED
     dry_run = service.fab_download_request(
         "asset-1", project, tmp_path, manifest, owned=True, confirmed=True
@@ -504,6 +491,10 @@ def test_hook_contract_describes_mutation_and_required_fields():
         "launcher_pid",
         "allowed_root",
     ]
+    assert operations["fab.asset_detail.request"]["mutating"] is False
+    assert operations["fab.asset_detail.request"]["required_fields"] == ["asset_id"]
+    assert operations["fab.download_status_batch.request"]["mutating"] is False
+    assert operations["fab.download_status_batch.request"]["required_fields"] == ["assets"]
     assert operations["fab.library_sources.request"]["mutating"] is False
 
 
@@ -683,9 +674,7 @@ def test_typed_fab_library_sync_scopes_paths_and_is_dry_run(tmp_path):
 
 def test_typed_engine_install_request_requires_scope_for_install_root(tmp_path):
     manifest = tmp_path / "missing-hook.json"
-    result = EpicService().engine_install_request(
-        "5.5", manifest, install_root=tmp_path / "UE"
-    )
+    result = EpicService().engine_install_request("5.5", manifest, install_root=tmp_path / "UE")
     assert result.state is CapabilityState.HUMAN_REQUIRED
     assert "allowed_root" in result.message
 
@@ -717,6 +706,62 @@ def test_read_only_fab_search_request_includes_local_plan(tmp_path):
     assert result.operation == "fab.search.request"
     assert result.details["payload"]["query"] == "arrow"
     assert result.details["plan"]["details"]["result_count"] == 1
+
+
+def test_read_only_fab_asset_detail_request_includes_cache_evidence(tmp_path):
+    database = tmp_path / "listings_v1.db"
+    cache = tmp_path / "VaultCache" / "Asset"
+    cache.mkdir(parents=True)
+    _fab_db(
+        database,
+        [("asset-1", "Free Arrow Trail", "VFX", "fbx", cache, True)],
+    )
+    manifest = _hook_manifest(tmp_path, ["fab.asset_detail.request"])
+    result = EpicService().fab_asset_detail_request(
+        "asset-1",
+        manifest,
+        database_paths=[database],
+        cache_roots=[tmp_path / "VaultCache"],
+        confirmed=True,
+    )
+    assert result.state is CapabilityState.READ_ONLY
+    assert result.operation == "fab.asset_detail.request"
+    assert result.details["plan"]["details"]["asset"]["title"] == "Free Arrow Trail"
+    assert result.details["plan"]["details"]["download_status"]["state"] == "downloaded"
+
+
+def test_read_only_fab_download_status_batch_is_bounded_and_merged(tmp_path):
+    database = tmp_path / "listings_v1.db"
+    cache = tmp_path / "VaultCache" / "Asset"
+    cache.mkdir(parents=True)
+    _fab_db(
+        database,
+        [
+            ("asset-1", "Free Arrow Trail", "VFX", "fbx", cache, True),
+            ("asset-2", "Free Snowman", "Environment", "fbx", None, True),
+        ],
+    )
+    manifest = _hook_manifest(tmp_path, ["fab.download_status_batch.request"])
+    result = EpicService().fab_download_status_batch_request(
+        ["asset-1", "asset-2"],
+        manifest,
+        database_paths=[database],
+        cache_roots=[tmp_path / "VaultCache"],
+        confirmed=True,
+    )
+    assert result.state is CapabilityState.READ_ONLY
+    assert result.operation == "fab.download_status_batch.request"
+    assert result.details["plan"]["details"]["downloaded_count"] == 1
+    assert [item["asset_id"] for item in result.details["payload"]["assets"]] == [
+        "asset-1",
+        "asset-2",
+    ]
+
+    duplicate = EpicService().fab_download_status_batch_request(
+        ["asset-1", "asset-1"], manifest, database_paths=[database], confirmed=True
+    )
+    assert duplicate.state is CapabilityState.UNAVAILABLE
+    assert "duplicates" in duplicate.message
 
 
 def test_read_only_inventory_and_status_requests_are_scoped(tmp_path):

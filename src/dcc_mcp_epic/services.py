@@ -169,13 +169,7 @@ class EpicService:
         entries = list_engine_installs(manifest_root)
         checks = []
         for entry in entries:
-            editor = (
-                entry.install_location
-                / "Engine"
-                / "Binaries"
-                / "Win64"
-                / "UnrealEditor.exe"
-            )
+            editor = entry.install_location / "Engine" / "Binaries" / "Win64" / "UnrealEditor.exe"
             checks.append(
                 {
                     "app_name": entry.app_name,
@@ -528,6 +522,70 @@ class EpicService:
             ),
         )
 
+    def fab_asset_detail_request(
+        self,
+        asset_id: str,
+        hook_manifest: Union[str, Path],
+        *,
+        database_paths: Optional[Sequence[Union[str, Path]]] = None,
+        search_roots: Optional[Sequence[Union[str, Path]]] = None,
+        cache_roots: Optional[Sequence[Union[str, Path]]] = None,
+        max_depth: int = 6,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Route one local Fab listing and its cache evidence through a hook."""
+
+        operation = "fab.asset_detail.request"
+        normalized = str(asset_id or "").strip()
+        if not normalized:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "asset_id must not be empty",
+                {"side_effects_performed": False},
+            )
+        local = self.fab.list_local_libraries(
+            database_paths,
+            search_roots=search_roots,
+            max_depth=max_depth,
+        )
+        matches = [item for item in local.get("assets", []) if item.get("uid") == normalized]
+        asset = matches[0] if matches else None
+        status = None
+        if asset is not None:
+            status = self.fab.inspect_download_state(
+                normalized,
+                asset.get("database_path", DEFAULT_FAB_LIBRARY_DB),
+                cache_roots=cache_roots,
+            )
+        payload: Dict[str, Any] = {"asset_id": normalized, "max_depth": int(max_depth)}
+        if database_paths:
+            payload["database_paths"] = [
+                str(Path(item).expanduser().resolve()) for item in database_paths
+            ]
+        if search_roots:
+            payload["search_roots"] = [
+                str(Path(item).expanduser().resolve()) for item in search_roots
+            ]
+        if cache_roots:
+            payload["cache_roots"] = [
+                str(Path(item).expanduser().resolve()) for item in cache_roots
+            ]
+        return self._typed_hook_request(
+            operation,
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "fab.asset_detail",
+                "local Fab asset detail and cache evidence were read before invoking the hook",
+                {"asset_id": normalized, "asset": asset, "download_status": status},
+            ),
+        )
+
     def fab_library_sources_request(
         self,
         hook_manifest: Union[str, Path],
@@ -602,6 +660,87 @@ class EpicService:
                 CapabilityState.READ_ONLY,
                 "fab.download_status",
                 "local Fab download evidence was read before invoking the provider hook",
+                local,
+            ),
+        )
+
+    def fab_download_status_batch_request(
+        self,
+        asset_ids: Sequence[str],
+        hook_manifest: Union[str, Path],
+        *,
+        database_paths: Optional[Sequence[Union[str, Path]]] = None,
+        search_roots: Optional[Sequence[Union[str, Path]]] = None,
+        cache_roots: Optional[Sequence[Union[str, Path]]] = None,
+        max_depth: int = 6,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Route bounded multi-asset download evidence through a hook."""
+
+        operation = "fab.download_status_batch.request"
+        values = [str(item).strip() for item in asset_ids if str(item).strip()]
+        if not values:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "asset_ids must contain at least one non-empty id",
+                {"side_effects_performed": False},
+            )
+        if len(values) > 100:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "asset_ids is limited to 100 entries per request",
+                {"count": len(values), "side_effects_performed": False},
+            )
+        if len(set(values)) != len(values):
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "asset_ids must not contain duplicates",
+                {"side_effects_performed": False},
+            )
+        local = self.fab.inspect_download_states(
+            values,
+            database_paths,
+            search_roots=search_roots,
+            cache_roots=cache_roots,
+            max_depth=max_depth,
+        )
+        if local.get("error"):
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                str(local["error"]),
+                {"side_effects_performed": False},
+            )
+        payload: Dict[str, Any] = {
+            "assets": [{"asset_id": asset_id} for asset_id in values],
+            "max_depth": int(max_depth),
+        }
+        if database_paths:
+            payload["database_paths"] = [
+                str(Path(item).expanduser().resolve()) for item in database_paths
+            ]
+        if search_roots:
+            payload["search_roots"] = [
+                str(Path(item).expanduser().resolve()) for item in search_roots
+            ]
+        if cache_roots:
+            payload["cache_roots"] = [
+                str(Path(item).expanduser().resolve()) for item in cache_roots
+            ]
+        return self._typed_hook_request(
+            operation,
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "fab.download_status_batch",
+                "local Fab download evidence was read before invoking the hook",
                 local,
             ),
         )
@@ -997,9 +1136,7 @@ class EpicService:
             "quality": quality,
             "plan": plan.as_dict(),
             "hook": hook_result.as_dict(),
-            "side_effects_performed": hook_result.details.get(
-                "side_effects_performed", False
-            ),
+            "side_effects_performed": hook_result.details.get("side_effects_performed", False),
             "verification_required": (
                 "re-read Epic's local Fab index and project import inventory after the hook"
             ),
