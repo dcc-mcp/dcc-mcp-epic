@@ -24,6 +24,7 @@ HOOK_OPERATIONS = frozenset(
         "fab.export.request",
         "fab.import_cached.request",
         "fab.import_all_cached.request",
+        "fab.import_inventory.request",
         "fab.launcher_import.request",
         "fab.launcher_status.request",
         "project.import.request",

@@ -140,3 +140,38 @@ def test_import_rejects_cache_path_outside_vault(tmp_path):
     )
     assert result.state is CapabilityState.UNAVAILABLE
     assert "outside" in result.message
+
+
+def test_project_import_inventory_verifies_manifest_hashes(tmp_path):
+    import hashlib
+    import json
+
+    project = tmp_path / "project"
+    destination = project / "Content" / "Fab" / "Hero-asset-1"
+    destination.mkdir(parents=True)
+    target = destination / "Meshes" / "hero.uasset"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"hero")
+    manifest = {
+        "schema": "dcc-mcp-epic.fab-import.v1",
+        "asset_id": "asset-1",
+        "files": [
+            {
+                "path": "Meshes/hero.uasset",
+                "size": 4,
+                "sha256": hashlib.sha256(b"hero").hexdigest(),
+            }
+        ],
+    }
+    (destination / ".dcc-mcp-fab.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+    service = EpicService()
+    inventory = service.fab.project_import_inventory(project, tmp_path)
+    assert inventory["all_valid"] is True
+    assert inventory["asset_count"] == 1
+    assert inventory["file_count"] == 1
+    target.write_bytes(b"tampered")
+    inventory = service.fab.project_import_inventory(project, tmp_path)
+    assert inventory["all_valid"] is False
+    assert inventory["assets"][0]["mismatched_files"] == ["Meshes/hero.uasset"]

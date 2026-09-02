@@ -70,6 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
     fab_import_all.add_argument("--database", default=None)
     fab_import_all.add_argument("--confirmed", action="store_true")
     fab_import_all.add_argument("--execute", action="store_true")
+    fab_inventory = sub.add_parser("fab-project-inventory")
+    fab_inventory.add_argument("project_path")
+    fab_inventory.add_argument("--allowed-root", required=True)
+    fab_inventory.add_argument("--destination-subdir", default="Fab")
     fab_probe = sub.add_parser("fab-launcher-probe")
     fab_probe.add_argument("--editor-pid", type=int, required=True)
     fab_probe.add_argument("--port", type=int, default=DEFAULT_FAB_LAUNCHER_PORT)
@@ -168,6 +172,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                 database,
                 confirmed=args.confirmed,
                 dry_run=not args.execute,
+            )
+        )
+    elif args.command == "fab-project-inventory":
+        _dump(
+            service.fab.project_import_inventory(
+                args.project_path,
+                args.allowed_root,
+                destination_subdir=args.destination_subdir,
             )
         )
     elif args.command == "fab-launcher-probe":

@@ -44,6 +44,7 @@ class FabService:
             "export": CapabilityState.UNAVAILABLE.value,
             "import_cached": "available_if_owned_cached",
             "import_all_cached": "available_if_owned_cached",
+            "import_inventory": CapabilityState.READ_ONLY.value,
             "launcher_probe": CapabilityState.READ_ONLY.value,
             "launcher_status_probe": CapabilityState.READ_ONLY.value,
             "launcher_import": "available_if_bound_ue_editor",
@@ -428,4 +429,118 @@ class FabService:
             "side_effects_performed": any(
                 item.get("details", {}).get("side_effects_performed") for item in results
             ),
+        }
+
+    def project_import_inventory(
+        self,
+        project_path: Union[str, Path],
+        allowed_root: Union[str, Path],
+        *,
+        destination_subdir: str = "Fab",
+    ) -> Dict[str, Any]:
+        """Audit project-local Fab import manifests and their file hashes."""
+
+        try:
+            project = resolve_allowed_project(project_path, allowed_root)
+        except ValueError as exc:
+            return {
+                "operation": "fab.import_inventory",
+                "read_only": True,
+                "all_valid": False,
+                "error": str(exc),
+                "assets": [],
+            }
+        if project.suffix.lower() == ".uproject":
+            project = project.parent
+        if Path(destination_subdir).is_absolute() or ".." in Path(destination_subdir).parts:
+            return {
+                "operation": "fab.import_inventory",
+                "read_only": True,
+                "all_valid": False,
+                "error": "destination_subdir must be a relative path without traversal",
+                "project_path": str(project),
+                "assets": [],
+            }
+        root = project / "Content" / destination_subdir
+        if not root.is_dir():
+            return {
+                "operation": "fab.import_inventory",
+                "read_only": True,
+                "project_path": str(project),
+                "root": str(root),
+                "asset_count": 0,
+                "file_count": 0,
+                "total_bytes": 0,
+                "all_valid": True,
+                "assets": [],
+            }
+
+        assets = []
+        for manifest_path in sorted(root.rglob(_IMPORT_MANIFEST)):
+            record: Dict[str, Any] = {
+                "manifest": str(manifest_path),
+                "asset_id": None,
+                "file_count": 0,
+                "total_bytes": 0,
+                "valid": False,
+                "missing_files": [],
+                "mismatched_files": [],
+            }
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if manifest.get("schema") != "dcc-mcp-epic.fab-import.v1":
+                    raise ValueError("unsupported provenance schema")
+                record["asset_id"] = str(manifest.get("asset_id") or "")
+                files = manifest.get("files")
+                if not isinstance(files, list) or not files:
+                    raise ValueError("provenance manifest has no files")
+                valid = True
+                for item in files:
+                    if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+                        valid = False
+                        record["mismatched_files"].append("<invalid-entry>")
+                        continue
+                    relative = Path(item["path"])
+                    if relative.is_absolute() or ".." in relative.parts:
+                        valid = False
+                        record["mismatched_files"].append(item["path"])
+                        continue
+                    target = (manifest_path.parent / relative).resolve()
+                    try:
+                        target.relative_to(manifest_path.parent.resolve())
+                    except ValueError:
+                        valid = False
+                        record["mismatched_files"].append(item["path"])
+                        continue
+                    if not target.is_file() or target.is_symlink():
+                        valid = False
+                        record["missing_files"].append(item["path"])
+                        continue
+                    actual_size = target.stat().st_size
+                    record["file_count"] += 1
+                    record["total_bytes"] += actual_size
+                    expected_size = item.get("size")
+                    expected_hash = item.get("sha256")
+                    if (
+                        not isinstance(expected_size, int)
+                        or actual_size != expected_size
+                        or not isinstance(expected_hash, str)
+                        or hashlib.sha256(target.read_bytes()).hexdigest() != expected_hash
+                    ):
+                        valid = False
+                        record["mismatched_files"].append(item["path"])
+                record["valid"] = valid
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                record["error"] = str(exc)
+            assets.append(record)
+        return {
+            "operation": "fab.import_inventory",
+            "read_only": True,
+            "project_path": str(project),
+            "root": str(root),
+            "asset_count": len(assets),
+            "file_count": sum(item["file_count"] for item in assets),
+            "total_bytes": sum(item["total_bytes"] for item in assets),
+            "all_valid": all(item.get("valid") for item in assets),
+            "assets": assets,
         }

@@ -158,6 +158,18 @@ def epic_fab_import_all_cached(
     )
 
 
+def epic_fab_project_inventory(
+    project_path: str,
+    allowed_root: str,
+    destination_subdir: str = "Fab",
+) -> Dict[str, Any]:
+    """Audit imported Fab manifests and file hashes in a UE project."""
+
+    return _service.fab.project_import_inventory(
+        project_path, allowed_root, destination_subdir=destination_subdir
+    )
+
+
 def epic_fab_launcher_probe(
     editor_pid: int, port: int = DEFAULT_FAB_LAUNCHER_PORT
 ) -> Dict[str, Any]:
@@ -252,6 +264,7 @@ if FastMCP is not None:
         epic_fab_download_plan,
         epic_fab_import_cached_asset,
         epic_fab_import_all_cached,
+        epic_fab_project_inventory,
         epic_fab_launcher_probe,
         epic_fab_launcher_status_probe,
         epic_fab_launcher_import_request,
