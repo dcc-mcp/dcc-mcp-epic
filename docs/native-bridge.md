@@ -13,11 +13,16 @@ Initial allowlist:
 - `engine.verify.request`
 - `engine.launch.request`
 - `fab.search.request`
+- `fab.asset_detail.request`
 - `fab.library.request`
 - `fab.library_sources.request`
+- `fab.library_sync.request`
 - `fab.download.request`
 - `fab.download_batch.request`
 - `fab.download_status.request`
+- `fab.download_status_batch.request`
+- `fab.add_to_library.request`
+- `fab.add_to_library_batch.request`
 - `fab.add_to_project.request`
 - `fab.add_to_project_batch.request`
 - `fab.export.request`
@@ -28,13 +33,13 @@ Initial allowlist:
 - `fab.launcher_status.request`
 - `project.import.request`
 
-Read-only provider hooks are available for Launcher status, Fab search/library
-reads, download status, project import inventory, and the Fab callback listener
-probe. They mirror the direct MCP probes and include a local read plan in the
-result, so a provider can add an online/native implementation without changing
-the caller-facing contract. Their `side_effects_performed` result is always
-false; mutating operations remain the only operations that can report a
-mutation.
+Read-only provider hooks are available for Launcher status, Fab
+search/detail/library reads, single/batch download status, project import
+inventory, and the Fab callback listener probe. They mirror the direct MCP
+probes and include a local read plan in the result, so a provider can add an
+online/native implementation without changing the caller-facing contract.
+Their `side_effects_performed` result is always false; mutating operations
+remain the only operations that can report a mutation.
 
 The adapter also implements cached import locally. This path is intentionally
 separate from the native bridge: it reads Epic's local library index, requires
@@ -66,6 +71,15 @@ bounded list (maximum 100 IDs) and sends one deterministic batch payload. The
 hook must report its own job/result; callers must re-read every asset's
 `epic_fab_download_status` and the project import inventory before treating the
 batch as complete.
+
+`epic_fab_add_to_library_request` and
+`epic_fab_add_to_library_batch_request` are the account-ownership boundary.
+They require an explicit zero-price assertion and a user-owned hook must
+perform one official Add to My Library action per asset. A subsequent
+`epic_fab_library_sync_request` may refresh caller-approved local indexes, but
+the adapter never edits Epic's databases. Ownership and cache state must be
+verified with `epic_fab_asset_detail_request` or
+`epic_fab_download_status_batch_request`.
 
 UE-native Fab content is not batch-downloadable in Launcher. The typed
 `epic_fab_add_to_project_request` operation is the official native-content path;
