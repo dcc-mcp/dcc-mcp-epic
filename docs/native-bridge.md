@@ -15,6 +15,7 @@ Initial allowlist:
 - `fab.import_cached.request`
 - `fab.import_all_cached.request`
 - `fab.launcher_import.request`
+- `fab.launcher_status.request`
 
 The adapter also implements cached import locally. This path is intentionally
 separate from the native bridge: it reads Epic's local library index, requires
@@ -28,7 +29,8 @@ on `127.0.0.1:23429` and sends completion status to the Launcher on
 `127.0.0.1:24563`. The typed `fab-launcher-probe`/`fab-launcher-import` tools
 bind the endpoint to an exact UnrealEditor PID, HWND, and executable before
 sending the plugin's JSON payload. They never accept arbitrary URLs, commands,
-or credentials; completion still requires fresh UE asset-registry evidence.
+or credentials; `fab-launcher-status-probe` separately verifies the Launcher
+callback listener. Completion still requires fresh UE asset-registry evidence.
 
 The bridge must reject arbitrary command lines, URLs, PowerShell, credentials,
 purchase actions, and manifest writes. Long operations return a job ID and are

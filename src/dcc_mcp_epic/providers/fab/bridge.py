@@ -174,6 +174,43 @@ def probe_fab_launcher(pid: int, port: int = DEFAULT_FAB_LAUNCHER_PORT) -> Dict[
     }
 
 
+def probe_fab_status_listener(pid: int, port: int = DEFAULT_FAB_STATUS_PORT) -> Dict[str, Any]:
+    """Read-only probe for the Launcher callback endpoint used by FabLauncher."""
+
+    if pid <= 0 or not 1 <= port <= 65535:
+        raise ValueError("pid and port must be valid positive values")
+    try:
+        process = psutil.Process(pid)
+        actual_executable = process.exe()
+        connections = psutil.net_connections(kind="tcp")
+    except psutil.Error as exc:
+        return {
+            "protocol": "fablauncher.status.v1",
+            "pid": pid,
+            "port": port,
+            "listening": False,
+            "error": str(exc),
+            "read_only": True,
+        }
+    listeners = []
+    for connection in connections:
+        if not connection.laddr or connection.laddr.port != port:
+            continue
+        if connection.status != psutil.CONN_LISTEN or connection.pid != pid:
+            continue
+        listeners.append(str(connection.laddr.ip))
+    return {
+        "protocol": "fablauncher.status.v1",
+        "pid": pid,
+        "port": port,
+        "listening": bool(listeners),
+        "addresses": sorted(set(listeners)),
+        "actual_executable": actual_executable,
+        "direction": "Launcher receives UE import status callbacks",
+        "read_only": True,
+    }
+
+
 def send_import_request(
     payload: Dict[str, Any],
     *,

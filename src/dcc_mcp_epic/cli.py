@@ -7,7 +7,13 @@ from typing import List, Optional
 
 from .models import LauncherBinding
 from .providers.epic_launcher.manifest import DEFAULT_MANIFEST_ROOT
-from .providers.fab.bridge import DEFAULT_FAB_LAUNCHER_PORT, probe_fab_launcher, send_import_request
+from .providers.fab.bridge import (
+    DEFAULT_FAB_LAUNCHER_PORT,
+    DEFAULT_FAB_STATUS_PORT,
+    probe_fab_launcher,
+    probe_fab_status_listener,
+    send_import_request,
+)
 from .providers.fab.service import DEFAULT_FAB_LIBRARY_DB
 from .runtime import runtime_doctor
 from .services import EpicService
@@ -67,6 +73,9 @@ def build_parser() -> argparse.ArgumentParser:
     fab_probe = sub.add_parser("fab-launcher-probe")
     fab_probe.add_argument("--editor-pid", type=int, required=True)
     fab_probe.add_argument("--port", type=int, default=DEFAULT_FAB_LAUNCHER_PORT)
+    fab_status_probe = sub.add_parser("fab-launcher-status-probe")
+    fab_status_probe.add_argument("--launcher-pid", type=int, required=True)
+    fab_status_probe.add_argument("--port", type=int, default=DEFAULT_FAB_STATUS_PORT)
     fab_request = sub.add_parser("fab-launcher-import")
     fab_request.add_argument("payload", help="JSON file containing an assets list")
     fab_request.add_argument("--editor-pid", type=int, required=True)
@@ -163,6 +172,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
     elif args.command == "fab-launcher-probe":
         _dump(probe_fab_launcher(args.editor_pid, args.port))
+    elif args.command == "fab-launcher-status-probe":
+        _dump(probe_fab_status_listener(args.launcher_pid, args.port))
     elif args.command == "fab-launcher-import":
         try:
             payload = json.loads(Path(args.payload).read_text(encoding="utf-8-sig"))

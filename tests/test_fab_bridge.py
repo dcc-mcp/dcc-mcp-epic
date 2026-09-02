@@ -1,7 +1,11 @@
 import os
 import socket
 
-from dcc_mcp_epic.providers.fab.bridge import probe_fab_launcher, validate_import_payload
+from dcc_mcp_epic.providers.fab.bridge import (
+    probe_fab_launcher,
+    probe_fab_status_listener,
+    validate_import_payload,
+)
 
 
 def test_validate_fab_launcher_payload_requires_existing_supported_files(tmp_path):
@@ -81,5 +85,18 @@ def test_probe_fab_launcher_reports_listener_for_bound_pid():
         evidence = probe_fab_launcher(os.getpid(), listener.getsockname()[1])
         assert evidence["listening"] is True
         assert "127.0.0.1" in evidence["addresses"]
+    finally:
+        listener.close()
+
+
+def test_probe_fab_status_listener_reports_callback_listener_for_bound_pid():
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    try:
+        evidence = probe_fab_status_listener(os.getpid(), listener.getsockname()[1])
+        assert evidence["listening"] is True
+        assert evidence["protocol"] == "fablauncher.status.v1"
+        assert evidence["direction"].startswith("Launcher receives")
     finally:
         listener.close()

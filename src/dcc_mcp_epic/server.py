@@ -12,7 +12,9 @@ from .models import LauncherBinding
 from .providers.epic_launcher.manifest import DEFAULT_MANIFEST_ROOT
 from .providers.fab.bridge import (
     DEFAULT_FAB_LAUNCHER_PORT,
+    DEFAULT_FAB_STATUS_PORT,
     probe_fab_launcher,
+    probe_fab_status_listener,
     send_import_request,
 )
 from .runtime import runtime_doctor
@@ -164,6 +166,14 @@ def epic_fab_launcher_probe(
     return probe_fab_launcher(editor_pid, port)
 
 
+def epic_fab_launcher_status_probe(
+    launcher_pid: int, port: int = DEFAULT_FAB_STATUS_PORT
+) -> Dict[str, Any]:
+    """Probe the Launcher callback listener used for Fab import status."""
+
+    return probe_fab_status_listener(launcher_pid, port)
+
+
 def epic_fab_launcher_import_request(
     payload: Dict[str, Any],
     editor_pid: int,
@@ -243,6 +253,7 @@ if FastMCP is not None:
         epic_fab_import_cached_asset,
         epic_fab_import_all_cached,
         epic_fab_launcher_probe,
+        epic_fab_launcher_status_probe,
         epic_fab_launcher_import_request,
         epic_project_verify,
         epic_launcher_status,
