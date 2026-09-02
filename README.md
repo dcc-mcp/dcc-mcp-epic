@@ -39,6 +39,8 @@ no generic UI automation fallback.
   project import hooks enforce explicit roots, formats, and confirmation.
 - Bounded batch download request: up to 100 free, owned asset IDs can be sent
   to one user-owned hook, with per-asset verification required afterwards.
+  UE-native content is rejected for this operation because Fab Launcher uses
+  Add to Project instead; use `fab-add-to-project-request` for UE content.
 - Hook contract introspection: `hook-contract` / `epic_hook_contract` returns
   the stable `epic.hook.v1` operation list, required fields, mutation flags,
   and confirmation defaults for self-owned integrations.
@@ -95,6 +97,8 @@ uv run dcc-mcp-epic-cli fab-search Arrow `
 uv run dcc-mcp-epic-cli fab-download-batch-request P:\game-test\ue-arpg `
   <asset-id-1> <asset-id-2> --allowed-root P:\game-test\ue-arpg `
   --hook-manifest C:\path\hook.json --owned
+uv run dcc-mcp-epic-cli fab-add-to-project-request <asset-id> P:\game-test\ue-arpg `
+  --allowed-root P:\game-test\ue-arpg --hook-manifest C:\path\hook.json --owned
 uv run dcc-mcp-epic-cli fab-export-request <asset-id> P:\game-test\ue-arpg\Exports `
   --allowed-root P:\game-test\ue-arpg --hook-manifest C:\path\hook.json --owned
 uv run python scripts/probe_mcp.py

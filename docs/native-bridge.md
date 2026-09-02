@@ -14,6 +14,7 @@ Initial allowlist:
 - `engine.launch.request`
 - `fab.download.request`
 - `fab.download_batch.request`
+- `fab.add_to_project.request`
 - `fab.export.request`
 - `fab.import_cached.request`
 - `fab.import_all_cached.request`
@@ -52,6 +53,13 @@ bounded list (maximum 100 IDs) and sends one deterministic batch payload. The
 hook must report its own job/result; callers must re-read every asset's
 `epic_fab_download_status` and the project import inventory before treating the
 batch as complete.
+
+UE-native Fab content is not batch-downloadable in Launcher. The typed
+`epic_fab_add_to_project_request` operation is the official native-content path;
+it sends one asset ID and a scoped `.uproject`/project directory to a declared
+hook. The hook must report completion, after which callers re-read Fab status and
+the Unreal project inventory. Exchange formats such as FBX, GLTF/GLB, OBJ, and
+USD remain available through the batch/export operations.
 
 `epic_hook_contract` (or `hook-contract` in the CLI) is the source of truth for
 operation names, required identity fields, mutation flags, and confirmation

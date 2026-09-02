@@ -520,8 +520,18 @@ class EpicService:
                 "asset_ids must not contain duplicates",
                 {"side_effects_performed": False},
             )
+        if format == "unreal-engine":
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.download_batch.request",
+                "Fab Launcher does not batch-download UE native content; use add_to_project",
+                {
+                    "format": format,
+                    "next_operation": "fab.add_to_project.request",
+                    "side_effects_performed": False,
+                },
+            )
         allowed_formats = {
-            "unreal-engine",
             "fbx",
             "glb",
             "gltf",
@@ -556,6 +566,65 @@ class EpicService:
         }
         return self._typed_hook_request(
             "fab.download_batch.request",
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+        )
+
+    def fab_add_to_project_request(
+        self,
+        asset_id: str,
+        project_path: Union[str, Path],
+        allowed_root: Union[str, Path],
+        hook_manifest: Union[str, Path],
+        *,
+        expected_price: Union[int, float] = 0,
+        owned: bool = False,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Dispatch the official UE-native Fab Add to Project operation."""
+
+        try:
+            project = resolve_allowed_project(project_path, allowed_root)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.add_to_project.request",
+                str(exc),
+                {"asset_id": asset_id, "side_effects_performed": False},
+            )
+        try:
+            require_free_asset(expected_price, owned)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.HUMAN_REQUIRED,
+                "fab.add_to_project.request",
+                str(exc),
+                {"asset_id": asset_id, "side_effects_performed": False},
+            )
+        if not isinstance(asset_id, str) or not asset_id.strip():
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.add_to_project.request",
+                "asset_id must not be empty",
+                {"project_path": str(project), "side_effects_performed": False},
+            )
+        payload = {
+            "asset_id": asset_id.strip(),
+            "project_path": str(project),
+            "allowed_root": str(Path(allowed_root).expanduser().resolve()),
+            "expected_price": expected_price,
+            "owned": True,
+            "format": "unreal-engine",
+            "action": "add_to_project",
+            "verification_required": (
+                "re-read the Fab download status and Unreal project import inventory"
+            ),
+        }
+        return self._typed_hook_request(
+            "fab.add_to_project.request",
             hook_manifest,
             payload,
             confirmed=confirmed,
