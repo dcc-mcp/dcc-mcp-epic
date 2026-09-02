@@ -87,6 +87,14 @@ def test_fab_plan_requires_ownership_and_allowed_root(tmp_path):
     assert "ownership" in result.message
 
 
+def test_fab_plan_rejects_project_traversal(tmp_path):
+    result = EpicService().fab.plan_download(
+        "asset-1", tmp_path.parent / "project", tmp_path, owned=True
+    )
+    assert result.state is CapabilityState.UNAVAILABLE
+    assert "outside allowed root" in result.message
+
+
 def test_project_verify_targets_ue_55(tmp_path):
     project = tmp_path / "RiftKidsARPG.uproject"
     project.write_text(json.dumps({"EngineAssociation": "5.5", "Plugins": []}), encoding="utf-8")

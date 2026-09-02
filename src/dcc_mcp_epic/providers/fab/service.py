@@ -401,7 +401,15 @@ class FabService:
         expected_price: Union[int, float] = 0,
         owned: bool = False,
     ) -> OperationResult:
-        target = resolve_allowed_project(project_path, allowed_root)
+        try:
+            target = resolve_allowed_project(project_path, allowed_root)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                "fab.download",
+                str(exc),
+                {"asset_id": asset_id, "side_effects_performed": False},
+            )
         try:
             require_free_asset(expected_price, owned)
         except ValueError as exc:
