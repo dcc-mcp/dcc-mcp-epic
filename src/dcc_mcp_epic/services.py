@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Union
 
@@ -13,6 +14,13 @@ from .providers.epic_launcher.runtime import bind_launcher
 from .providers.fab.bridge import DEFAULT_FAB_STATUS_PORT, probe_fab_status_listener
 from .providers.fab.service import DEFAULT_FAB_LIBRARY_DB, FabService
 from .providers.unreal.project import verify_project
+
+_LAUNCHER_ACTION_BACKENDS = {
+    "windows.post_message.v1": {"click", "double_click", "right_click", "toggle"},
+    "windows.post_message_key.v1": {"keypress", "keyboard_shortcut"},
+    "windows.post_message_text.v1": {"type", "type_chars"},
+    "windows.post_message_scroll.v1": {"scroll"},
+}
 
 
 class EpicService:
@@ -29,6 +37,7 @@ class EpicService:
             "engine.launch": CapabilityState.READ_ONLY.value,
             "engine.verify": CapabilityState.READ_ONLY.value,
             "launcher.status_request": "available_if_declared_read_only_hook",
+            "launcher.action_request": "available_if_declared_dcc_cua_hook",
             "engine.install.request": "available_if_declared_hook",
             "engine.update.request": "available_if_declared_hook",
             "engine.download.request": "available_if_declared_hook",
@@ -91,6 +100,184 @@ class EpicService:
                 "launcher.status",
                 "exact Launcher binding status was read before invoking the hook",
                 {"binding": binding.as_dict(), "status": status},
+            ),
+        )
+
+    def launcher_action_request(
+        self,
+        binding: LauncherBinding,
+        action_spec: Dict[str, Any],
+        hook_manifest: Union[str, Path],
+        *,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Dispatch one bounded exact-window action to a user-owned hook.
+
+        This is the only Epic UI action surface. The adapter requires a live
+        PID/HWND/executable binding and accepts only the project-owned
+        Windows PostMessage backends exposed by dcc-cua. Semantic selectors,
+        arbitrary commands, and generic automation are intentionally absent.
+        """
+
+        operation = "launcher.action.request"
+        try:
+            status = bind_launcher(binding).status()
+        except (OSError, ValueError, psutil.Error) as exc:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                f"Launcher binding failed: {exc}",
+                {"binding": binding.as_dict(), "side_effects_performed": False},
+            )
+        expected_executable = binding.executable.expanduser().resolve()
+        actual_value = status.get("actual_executable")
+        if (
+            not actual_value
+            or Path(str(actual_value)).expanduser().resolve() != expected_executable
+        ):
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "Launcher executable does not match the exact bound process",
+                {
+                    "expected_executable": str(expected_executable),
+                    "actual_executable": actual_value,
+                    "side_effects_performed": False,
+                },
+            )
+        if not isinstance(action_spec, dict):
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "action must be a JSON object",
+                {"side_effects_performed": False},
+            )
+        action = str(action_spec.get("action") or "").strip().lower()
+        backend = str(action_spec.get("input_backend_id") or "").strip()
+        allowed_actions = _LAUNCHER_ACTION_BACKENDS.get(backend)
+        if not allowed_actions or action not in allowed_actions:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "action and input_backend_id are not an allowed dcc-cua pair",
+                {
+                    "action": action,
+                    "input_backend_id": backend,
+                    "allowed_backends": sorted(_LAUNCHER_ACTION_BACKENDS),
+                    "side_effects_performed": False,
+                },
+            )
+        normalized = dict(action_spec)
+        normalized["action"] = action
+        normalized["input_backend_id"] = backend
+        if action in {"click", "double_click", "right_click", "toggle"}:
+            for field in ("x", "y"):
+                value = normalized.get(field)
+                if (
+                    not isinstance(value, (int, float))
+                    or isinstance(value, bool)
+                    or not math.isfinite(value)
+                    or value < 0
+                ):
+                    return OperationResult(
+                        CapabilityState.UNAVAILABLE,
+                        operation,
+                        f"{field} must be a finite non-negative coordinate",
+                        {"field": field, "side_effects_performed": False},
+                    )
+            width = normalized.get("observation_width")
+            height = normalized.get("observation_height")
+            if (
+                not isinstance(width, (int, float))
+                or not isinstance(height, (int, float))
+                or width <= 0
+                or height <= 0
+            ):
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "coordinate actions require positive observation_width and observation_height",
+                    {"side_effects_performed": False},
+                )
+            if normalized["x"] > width or normalized["y"] > height:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "action coordinates exceed the observation dimensions",
+                    {"side_effects_performed": False},
+                )
+        elif action in {"keypress", "keyboard_shortcut"}:
+            keys = normalized.get("keys")
+            if (
+                not isinstance(keys, list)
+                or not keys
+                or not all(isinstance(key, str) and key.strip() for key in keys)
+            ):
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "key actions require a non-empty string keys list",
+                    {"side_effects_performed": False},
+                )
+        elif action in {"type", "type_chars"}:
+            text = normalized.get("text")
+            if not isinstance(text, str) or not text or len(text) > 4096:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "text actions require 1 to 4096 characters",
+                    {"side_effects_performed": False},
+                )
+        elif action == "scroll":
+            horizontal = normalized.get("scroll_x", 0)
+            vertical = normalized.get("scroll_y", 0)
+            if (
+                not isinstance(horizontal, int)
+                or isinstance(horizontal, bool)
+                or not isinstance(vertical, int)
+                or isinstance(vertical, bool)
+            ):
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "scroll axes must be integers",
+                    {"side_effects_performed": False},
+                )
+            if (
+                horizontal
+                and vertical
+                or max(abs(horizontal), abs(vertical)) > 50
+                or not (horizontal or vertical)
+            ):
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "scroll requires exactly one non-zero axis of at most 50",
+                    {"side_effects_performed": False},
+                )
+        payload = {
+            "launcher_pid": int(binding.pid),
+            "launcher_hwnd": int(binding.hwnd),
+            "launcher_executable": str(expected_executable),
+            "launcher_version": str(binding.version),
+            "action": normalized,
+            "provider": "dcc-cua",
+            "verification_required": (
+                "capture the exact window after the action and verify the intended effect"
+            ),
+        }
+        return self._typed_hook_request(
+            operation,
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "launcher.action",
+                "exact Launcher identity and dcc-cua action constraints were validated",
+                {"binding": binding.as_dict(), "status": status, "action": normalized},
             ),
         )
 

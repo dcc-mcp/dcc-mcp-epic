@@ -12,6 +12,10 @@ no generic UI automation fallback.
 - UE 5.5 project verification: available, read-only.
 - UE install/update: plan-only; returns `human_required` until a supported
   native Launcher bridge is verified.
+- Exact Launcher UI actions: available through a declared `dcc-cua` hook for
+  bounded click/key/scroll/text actions. The request requires a live
+  PID/HWND/executable tuple, a known input backend, and post-action evidence;
+  semantic selectors and generic automation are rejected.
 - Fab search: read-only local index search. Fab download/export are available
   only through a declared user-owned hook; the adapter never automates login,
   CAPTCHA, 2FA, purchase, or license acceptance.
@@ -143,6 +147,12 @@ uv run dcc-mcp-epic-cli fab-import-inventory-request P:\game-test\ue-arpg `
   --allowed-root P:\game-test\ue-arpg --hook-manifest C:\path\hook.json
 uv run dcc-mcp-epic-cli fab-launcher-status-request `
   --launcher-pid <EpicLauncherPID> --hook-manifest C:\path\hook.json
+uv run dcc-mcp-epic-cli launcher-action-request `
+  --pid <EpicLauncherPID> --hwnd <EpicLauncherHWND> `
+  --executable C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe `
+  --version <LauncherVersion> `
+  --action-json '{"action":"keypress","keys":["ESC"],"input_backend_id":"windows.post_message_key.v1"}' `
+  --hook-manifest C:\path\hook.json
 uv run dcc-mcp-epic-cli fab-download-batch-request P:\game-test\ue-arpg `
   <asset-id-1> <asset-id-2> --allowed-root P:\game-test\ue-arpg `
   --hook-manifest C:\path\hook.json --owned

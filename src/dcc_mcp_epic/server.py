@@ -856,6 +856,28 @@ def epic_launcher_status_request(
     ).as_dict()
 
 
+def epic_launcher_action_request(
+    pid: int,
+    hwnd: int,
+    executable: str,
+    version: str,
+    action: Dict[str, Any],
+    hook_manifest: str,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch one bounded exact-window dcc-cua action through a hook."""
+
+    binding = LauncherBinding(pid, hwnd, Path(executable), version)
+    return _service.launcher_action_request(
+        binding,
+        action,
+        hook_manifest,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 def epic_hook_probe(manifest_path: str) -> Dict[str, Any]:
     """Validate a user-owned epic.hook.v1 manifest and executable digest."""
 
@@ -930,6 +952,7 @@ if FastMCP is not None:
         epic_project_import_request,
         epic_launcher_status,
         epic_launcher_status_request,
+        epic_launcher_action_request,
         epic_hook_probe,
         epic_hook_invoke,
     ):

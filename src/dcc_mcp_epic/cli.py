@@ -478,6 +478,15 @@ def build_parser() -> argparse.ArgumentParser:
     status_request.add_argument("--hook-manifest", required=True)
     status_request.add_argument("--confirmed", action="store_true")
     status_request.add_argument("--execute", action="store_true")
+    launcher_action = sub.add_parser("launcher-action-request")
+    launcher_action.add_argument("--pid", type=int, required=True)
+    launcher_action.add_argument("--hwnd", type=int, required=True)
+    launcher_action.add_argument("--executable", type=Path, required=True)
+    launcher_action.add_argument("--version", required=True)
+    launcher_action.add_argument("--action-json", required=True)
+    launcher_action.add_argument("--hook-manifest", required=True)
+    launcher_action.add_argument("--confirmed", action="store_true")
+    launcher_action.add_argument("--execute", action="store_true")
     return parser
 
 
@@ -939,6 +948,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         _dump(
             service.launcher_status_request(
                 binding,
+                args.hook_manifest,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "launcher-action-request":
+        try:
+            action = json.loads(args.action_json)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"--action-json must be valid JSON: {exc}") from exc
+        _dump(
+            service.launcher_action_request(
+                LauncherBinding(args.pid, args.hwnd, args.executable, args.version),
+                action,
                 args.hook_manifest,
                 confirmed=args.confirmed,
                 dry_run=not args.execute,

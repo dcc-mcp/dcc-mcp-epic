@@ -13,6 +13,7 @@ HOOK_PROTOCOL = "epic.hook.v1"
 HOOK_OPERATIONS = frozenset(
     {
         "launcher.status",
+        "launcher.action.request",
         "engine.install.request",
         "engine.update.request",
         "engine.download.request",
@@ -42,6 +43,7 @@ HOOK_OPERATIONS = frozenset(
 )
 MUTATING_HOOK_OPERATIONS = frozenset(
     {
+        "launcher.action.request",
         "engine.install.request",
         "engine.update.request",
         "engine.download.request",
@@ -66,6 +68,12 @@ MUTATING_HOOK_OPERATIONS = frozenset(
 # private Epic APIs or credentials.
 HOOK_OPERATION_REQUIRED_FIELDS = {
     "launcher.status": [],
+    "launcher.action.request": [
+        "launcher_pid",
+        "launcher_hwnd",
+        "launcher_executable",
+        "action",
+    ],
     "engine.install.request": ["target_version"],
     "engine.update.request": ["target_version"],
     "engine.download.request": ["target_version"],

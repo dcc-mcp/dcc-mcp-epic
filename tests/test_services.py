@@ -496,6 +496,13 @@ def test_hook_contract_describes_mutation_and_required_fields():
     assert operations["fab.download_status_batch.request"]["mutating"] is False
     assert operations["fab.download_status_batch.request"]["required_fields"] == ["assets"]
     assert operations["fab.library_sources.request"]["mutating"] is False
+    assert operations["launcher.action.request"]["mutating"] is True
+    assert operations["launcher.action.request"]["required_fields"] == [
+        "launcher_pid",
+        "launcher_hwnd",
+        "launcher_executable",
+        "action",
+    ]
 
 
 def test_typed_engine_download_request_is_dry_run_by_default(tmp_path):
@@ -796,6 +803,42 @@ def test_launcher_status_request_preserves_exact_binding(tmp_path):
     assert result.operation == "launcher.status"
     assert result.details["payload"]["pid"] == os.getpid()
     assert result.details["payload"]["hwnd"] == 1
+
+
+def test_launcher_action_request_is_scoped_to_dcc_cua_backend(tmp_path):
+    manifest = _hook_manifest(tmp_path, ["launcher.action.request"])
+    executable = __import__("pathlib").Path(__import__("psutil").Process(os.getpid()).exe())
+    binding = LauncherBinding(os.getpid(), 1, executable, "test")
+    result = EpicService().launcher_action_request(
+        binding,
+        {
+            "action": "keypress",
+            "keys": ["ESC"],
+            "input_backend_id": "windows.post_message_key.v1",
+        },
+        manifest,
+        confirmed=True,
+    )
+    assert result.state is CapabilityState.READ_ONLY
+    assert result.operation == "launcher.action.request"
+    assert result.details["payload"]["provider"] == "dcc-cua"
+    assert result.details["payload"]["launcher_pid"] == os.getpid()
+
+    invalid = EpicService().launcher_action_request(
+        binding,
+        {
+            "action": "click",
+            "x": 10,
+            "y": 10,
+            "input_backend_id": "generic.mouse.v1",
+            "observation_width": 100,
+            "observation_height": 100,
+        },
+        manifest,
+        confirmed=True,
+    )
+    assert invalid.state is CapabilityState.UNAVAILABLE
+    assert "allowed dcc-cua pair" in invalid.message
 
 
 def test_project_import_request_rejects_source_traversal(tmp_path):

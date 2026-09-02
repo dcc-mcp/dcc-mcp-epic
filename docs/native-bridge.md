@@ -7,6 +7,7 @@ exact Launcher PID/HWND, executable path, and an idempotency key.
 Initial allowlist:
 
 - `launcher.status`
+- `launcher.action.request`
 - `engine.install.request`
 - `engine.update.request`
 - `engine.download.request`
@@ -59,6 +60,14 @@ callback listener. Completion still requires fresh UE asset-registry evidence.
 The bridge must reject arbitrary command lines, URLs, PowerShell, credentials,
 purchase actions, and manifest writes. Long operations return a job ID and are
 verified by fresh filesystem/asset-registry evidence before completion.
+
+`launcher.action.request` is the bounded UI surface for a custom-rendered
+Launcher. It requires the exact PID/HWND/executable tuple and one of the
+project-owned dcc-cua PostMessage backends for click, key, scroll, or text
+input. Coordinates must include the latest observation dimensions; semantic
+selectors and generic automation are not part of this contract. A hook must
+capture the exact window again and report whether the intended effect was
+observed.
 
 `epic_fab_download_request` is the typed hook entry for a user-owned download
 bridge. It rejects non-zero prices and unverified ownership, sends only the
