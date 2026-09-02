@@ -20,6 +20,7 @@ HOOK_OPERATIONS = frozenset(
         "engine.launch.request",
         "fab.search.request",
         "fab.library.request",
+        "fab.library_sources.request",
         "fab.download.request",
         "fab.export.request",
         "fab.import_cached.request",

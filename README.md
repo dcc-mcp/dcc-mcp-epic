@@ -16,9 +16,12 @@ no generic UI automation fallback.
   adapter never automates login, CAPTCHA, 2FA, purchase, or license acceptance.
 - Local Fab library index: available, read-only, when Epic's `listings_v1.db`
   exists.
+- Multi-source Fab inventory: available, read-only, merges explicitly selected
+  indexes and can discover `listings_v1.db` below caller-approved roots.
 - Cached Fab import: available for already-owned/downloaded Unreal Content;
   dry-run, explicit confirmation, VaultCache-root enforcement, no-overwrite
-  behavior, and per-file provenance hashes are built in.
+  behavior, and per-file provenance hashes are built in. FBX/GLTF/OBJ/USD
+  source downloads with textures are also preserved for Unreal's importer.
 - Generic CUA fallback: disabled.
 - Self-owned hook bridge: supported through the fixed `epic.hook.v1` manifest
   contract, with dry-run and explicit confirmation as defaults.
@@ -47,12 +50,20 @@ uv run dcc-mcp-epic-cli engines
 uv run dcc-mcp-epic-cli project-verify P:\game-test\ue-arpg\RiftKidsARPG.uproject
 uv run dcc-mcp-epic-cli engine-verify
 uv run dcc-mcp-epic-cli fab-library
+uv run dcc-mcp-epic-cli fab-library-sources `
+  --search-root C:\ProgramData\Epic `
+  --search-root C:\Users\hallong\Downloads\Video `
+  --search-root F:\UE\EpicGamesLauncher
 uv run dcc-mcp-epic-cli fab-asset-inspect b8ff3ab4-0e81-4335-bbf0-fea15f6fcdfc
 uv run dcc-mcp-epic-cli fab-download-request <asset-id> P:\game-test\ue-arpg `
   --allowed-root P:\game-test\ue-arpg --hook-manifest C:\path\hook.json `
   --owned
 uv run dcc-mcp-epic-cli fab-import-all-cached P:\game-test\ue-arpg `
-  --allowed-root P:\game-test\ue-arpg
+  --allowed-root P:\game-test\ue-arpg `
+  --database C:\ProgramData\Epic\EpicGamesLauncher\VaultCache\FabLibrary\listings_v1.db `
+  --database F:\UE\EpicGamesLauncher\VaultCache\FabLibrary\listings_v1.db `
+  --cache-root C:\ProgramData\Epic\EpicGamesLauncher\VaultCache `
+  --cache-root F:\UE\EpicGamesLauncher\VaultCache
 uv run dcc-mcp-epic-cli fab-project-inventory P:\game-test\ue-arpg `
   --allowed-root P:\game-test\ue-arpg
 uv run dcc-mcp-epic-cli fab-launcher-probe --editor-pid <UnrealEditorPID>

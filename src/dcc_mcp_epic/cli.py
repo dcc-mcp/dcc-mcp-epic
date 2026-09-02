@@ -34,6 +34,16 @@ def build_parser() -> argparse.ArgumentParser:
     engine_verify.add_argument("--manifest-root", default=None)
     fab_library = sub.add_parser("fab-library")
     fab_library.add_argument("--database", default=None)
+    fab_sources = sub.add_parser("fab-library-sources")
+    fab_sources.add_argument(
+        "--database", dest="databases", action="append", default=None,
+        help="Explicit listings_v1.db path; repeat for multiple Epic cache indexes",
+    )
+    fab_sources.add_argument(
+        "--search-root", dest="search_roots", action="append", default=None,
+        help="Root to scan read-only for listings_v1.db; repeat as needed",
+    )
+    fab_sources.add_argument("--max-depth", type=int, default=6)
     project = sub.add_parser("project-verify")
     project.add_argument("project_path")
     project.add_argument("--engine", default="5.5")
@@ -72,13 +82,24 @@ def build_parser() -> argparse.ArgumentParser:
     fab_import.add_argument("project_path")
     fab_import.add_argument("--allowed-root", required=True)
     fab_import.add_argument("--database", default=None)
+    fab_import.add_argument(
+        "--cache-root", dest="cache_roots", action="append", default=None,
+        help="Approved VaultCache root; repeat to allow multiple Epic cache locations",
+    )
     fab_import.add_argument("--destination-subdir", default="Fab")
     fab_import.add_argument("--confirmed", action="store_true")
     fab_import.add_argument("--execute", action="store_true")
     fab_import_all = sub.add_parser("fab-import-all-cached")
     fab_import_all.add_argument("project_path")
     fab_import_all.add_argument("--allowed-root", required=True)
-    fab_import_all.add_argument("--database", default=None)
+    fab_import_all.add_argument(
+        "--database", dest="databases", action="append", default=None,
+        help="Explicit listings_v1.db path; repeat for multiple Epic cache indexes",
+    )
+    fab_import_all.add_argument(
+        "--cache-root", dest="cache_roots", action="append", default=None,
+        help="Approved VaultCache root; repeat to allow multiple Epic cache locations",
+    )
     fab_import_all.add_argument("--confirmed", action="store_true")
     fab_import_all.add_argument("--execute", action="store_true")
     fab_inventory = sub.add_parser("fab-project-inventory")
@@ -139,6 +160,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.command == "fab-library":
         database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
         _dump(service.fab.list_local_library(database))
+    elif args.command == "fab-library-sources":
+        _dump(
+            service.fab.list_local_libraries(
+                args.databases,
+                search_roots=args.search_roots,
+                max_depth=args.max_depth,
+            )
+        )
     elif args.command == "engine-update-plan":
         root = args.manifest_root or str(DEFAULT_MANIFEST_ROOT)
         _dump(service.engine_update_plan(args.target_version, root).as_dict())
@@ -184,18 +213,19 @@ def main(argv: Optional[List[str]] = None) -> int:
                 args.project_path,
                 args.allowed_root,
                 database,
+                cache_roots=args.cache_roots,
                 destination_subdir=args.destination_subdir,
                 confirmed=args.confirmed,
                 dry_run=not args.execute,
             ).as_dict()
         )
     elif args.command == "fab-import-all-cached":
-        database = args.database or str(DEFAULT_FAB_LIBRARY_DB)
         _dump(
             service.fab.import_all_cached_assets(
                 args.project_path,
                 args.allowed_root,
-                database,
+                database_paths=args.databases,
+                cache_roots=args.cache_roots,
                 confirmed=args.confirmed,
                 dry_run=not args.execute,
             )

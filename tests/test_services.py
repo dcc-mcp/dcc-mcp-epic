@@ -61,6 +61,46 @@ def test_local_fab_library_is_read_only(tmp_path):
     assert database.read_bytes() == before
 
 
+def test_local_fab_library_sources_merges_indexes_and_prefers_downloaded(tmp_path):
+    import sqlite3
+
+    def create_db(path, rows):
+        connection = sqlite3.connect(path)
+        connection.execute(
+            "CREATE TABLE local_listing (uid TEXT, title TEXT, category_name TEXT, "
+            "category_path TEXT)"
+        )
+        connection.execute(
+            "CREATE TABLE download_meta (listing_uid TEXT, format TEXT, quality TEXT, "
+            "path TEXT, cache_size INTEGER)"
+        )
+        connection.execute("CREATE TABLE listing_acquisition (listing_uid TEXT, user_uid TEXT)")
+        for uid, title, cache_path in rows:
+            connection.execute("INSERT INTO local_listing VALUES (?, ?, '', '')", (uid, title))
+            connection.execute(
+                "INSERT INTO download_meta VALUES (?, 'unreal-engine', '', ?, 10)",
+                (uid, str(cache_path) if cache_path else ""),
+            )
+            connection.execute("INSERT INTO listing_acquisition VALUES (?, 'user-1')", (uid,))
+        connection.commit()
+        connection.close()
+
+    downloaded = tmp_path / "downloaded"
+    downloaded.mkdir()
+    first = tmp_path / "first.db"
+    second = tmp_path / "second.db"
+    create_db(first, [("asset-1", "Asset", None), ("asset-2", "Other", downloaded)])
+    create_db(second, [("asset-1", "Asset", downloaded)])
+
+    result = EpicService().fab.list_local_libraries([first, second])
+    assert result["read_only"] is True
+    assert result["database_count"] == 2
+    assert result["unique_asset_count"] == 2
+    merged = {item["uid"]: item for item in result["assets"]}
+    assert merged["asset-1"]["downloaded"] is True
+    assert merged["asset-1"]["database_path"] == str(second.resolve())
+
+
 def test_import_cached_asset_is_dry_run_then_idempotent(tmp_path, monkeypatch):
     import sqlite3
 
@@ -140,6 +180,81 @@ def test_import_rejects_cache_path_outside_vault(tmp_path):
     )
     assert result.state is CapabilityState.UNAVAILABLE
     assert "outside" in result.message
+
+
+def test_import_accepts_explicit_second_cache_root(tmp_path):
+    import sqlite3
+
+    cache_root = tmp_path / "second-vault"
+    cache = cache_root / "AssetCache"
+    content = cache / "Content"
+    content.mkdir(parents=True)
+    (content / "Asset.uasset").write_bytes(b"asset")
+    database = tmp_path / "listings_v1.db"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE local_listing (uid TEXT, title TEXT, category_name TEXT, category_path TEXT)"
+    )
+    connection.execute(
+        "CREATE TABLE download_meta (listing_uid TEXT, format TEXT, quality TEXT, "
+        "path TEXT, cache_size INTEGER)"
+    )
+    connection.execute("CREATE TABLE listing_acquisition (listing_uid TEXT, user_uid TEXT)")
+    connection.execute("INSERT INTO local_listing VALUES ('asset-1', 'Asset', '', '')")
+    connection.execute(
+        "INSERT INTO download_meta VALUES ('asset-1', 'unreal-engine', '', ?, 1)",
+        (str(cache),),
+    )
+    connection.execute("INSERT INTO listing_acquisition VALUES ('asset-1', 'user-1')")
+    connection.commit()
+    connection.close()
+    project = tmp_path / "project"
+    (project / "Content").mkdir(parents=True)
+    result = EpicService().fab.plan_import_cached_asset(
+        "asset-1",
+        project,
+        tmp_path,
+        database,
+        cache_roots=[cache_root],
+    )
+    assert result.state is CapabilityState.READ_ONLY
+
+
+def test_import_supports_fab_source_files_and_textures(tmp_path):
+    import sqlite3
+
+    cache_root = tmp_path / "VaultCache"
+    source = cache_root / "FabLibrary" / "Armor" / "extracted"
+    (source / "textures").mkdir(parents=True)
+    (source / "source").mkdir()
+    (source / "source" / "FemaleArmor.fbx").write_bytes(b"fbx")
+    (source / "textures" / "Base_color.png").write_bytes(b"png")
+    database = tmp_path / "listings_v1.db"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE local_listing (uid TEXT, title TEXT, category_name TEXT, category_path TEXT)"
+    )
+    connection.execute(
+        "CREATE TABLE download_meta (listing_uid TEXT, format TEXT, quality TEXT, "
+        "path TEXT, cache_size INTEGER)"
+    )
+    connection.execute("CREATE TABLE listing_acquisition (listing_uid TEXT, user_uid TEXT)")
+    connection.execute("INSERT INTO local_listing VALUES ('asset-1', 'Armor', '', '')")
+    connection.execute(
+        "INSERT INTO download_meta VALUES ('asset-1', 'fbx', '', ?, 1)", (str(source),)
+    )
+    connection.execute("INSERT INTO listing_acquisition VALUES ('asset-1', 'user-1')")
+    connection.commit()
+    connection.close()
+    project = tmp_path / "project"
+    (project / "Content").mkdir(parents=True)
+    service = EpicService()
+    result = service.fab.plan_import_cached_asset(
+        "asset-1", project, tmp_path, database, cache_roots=[cache_root]
+    )
+    assert result.state is CapabilityState.READ_ONLY
+    assert result.details["import_mode"] == "source-files"
+    assert result.details["file_count"] == 2
 
 
 def test_project_import_inventory_verifies_manifest_hashes(tmp_path):

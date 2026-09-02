@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -86,6 +86,20 @@ def epic_fab_library_list(database_path: Optional[str] = None) -> Dict[str, Any]
     )
 
 
+def epic_fab_library_sources(
+    database_paths: Optional[List[str]] = None,
+    search_roots: Optional[List[str]] = None,
+    max_depth: int = 6,
+) -> Dict[str, Any]:
+    """Discover and merge caller-selected local Fab library indexes read-only."""
+
+    return _service.fab.list_local_libraries(
+        database_paths,
+        search_roots=search_roots,
+        max_depth=max_depth,
+    )
+
+
 def epic_fab_asset_inspect(asset_id: str, database_path: Optional[str] = None) -> Dict[str, Any]:
     """Inspect one local Fab asset without changing the cache."""
 
@@ -144,6 +158,7 @@ def epic_fab_import_cached_asset(
     allowed_root: str,
     database_path: Optional[str] = None,
     destination_subdir: str = "Fab",
+    cache_roots: Optional[List[str]] = None,
     confirmed: bool = False,
     dry_run: bool = True,
 ) -> Dict[str, Any]:
@@ -151,6 +166,7 @@ def epic_fab_import_cached_asset(
 
     kwargs = {
         "destination_subdir": destination_subdir,
+        "cache_roots": cache_roots,
         "confirmed": confirmed,
         "dry_run": dry_run,
     }
@@ -165,6 +181,8 @@ def epic_fab_import_all_cached(
     project_path: str,
     allowed_root: str,
     database_path: Optional[str] = None,
+    database_paths: Optional[List[str]] = None,
+    cache_roots: Optional[List[str]] = None,
     confirmed: bool = False,
     dry_run: bool = True,
 ) -> Dict[str, Any]:
@@ -175,12 +193,16 @@ def epic_fab_import_all_cached(
             project_path,
             allowed_root,
             database_path,
+            database_paths=database_paths,
+            cache_roots=cache_roots,
             confirmed=confirmed,
             dry_run=dry_run,
         )
     return _service.fab.import_all_cached_assets(
         project_path,
         allowed_root,
+        database_paths=database_paths,
+        cache_roots=cache_roots,
         confirmed=confirmed,
         dry_run=dry_run,
     )
@@ -288,6 +310,7 @@ if FastMCP is not None:
         epic_engine_launch_plan,
         epic_engine_verify,
         epic_fab_library_list,
+        epic_fab_library_sources,
         epic_fab_asset_inspect,
         epic_fab_download_plan,
         epic_fab_download_request,

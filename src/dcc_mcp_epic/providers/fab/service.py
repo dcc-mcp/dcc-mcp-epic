@@ -8,7 +8,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
 
 from ...models import CapabilityState, OperationResult
 from ...policy import require_free_asset, resolve_allowed_project
@@ -31,19 +31,45 @@ _ALLOWED_CONTENT_EXTENSIONS = {
     ".ufont",
     ".utxt",
 }
+_ALLOWED_SOURCE_EXTENSIONS = {
+    ".fbx",
+    ".glb",
+    ".gltf",
+    ".obj",
+    ".usd",
+    ".usda",
+    ".usdc",
+    ".usdz",
+    ".mtl",
+    ".bin",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".tga",
+    ".exr",
+}
 
 
 class FabService:
     """Fab boundary. It never emulates marketplace clicks or stores credentials."""
 
+    @staticmethod
+    def _is_relative_to(path: Path, root: Path) -> bool:
+        try:
+            path.relative_to(root)
+            return True
+        except ValueError:
+            return False
+
     def capabilities(self) -> Dict[str, Any]:
         return {
             "search": CapabilityState.UNAVAILABLE.value,
             "library": CapabilityState.READ_ONLY.value,
+            "library_sources": CapabilityState.READ_ONLY.value,
             "download": CapabilityState.UNAVAILABLE.value,
             "export": CapabilityState.UNAVAILABLE.value,
-            "import_cached": "available_if_owned_cached",
-            "import_all_cached": "available_if_owned_cached",
+            "import_cached": "available_if_owned_cached_or_source_download",
+            "import_all_cached": "available_if_owned_cached_or_source_download",
             "import_inventory": CapabilityState.READ_ONLY.value,
             "launcher_probe": CapabilityState.READ_ONLY.value,
             "launcher_status_probe": CapabilityState.READ_ONLY.value,
@@ -101,6 +127,133 @@ class FabService:
                 connection.close()
         return {"db_path": str(path), "read_only": True, "assets": assets}
 
+    @staticmethod
+    def _database_path_list(
+        database_path: Union[str, Path] = DEFAULT_FAB_LIBRARY_DB,
+        database_paths: Optional[Sequence[Union[str, Path]]] = None,
+    ) -> List[Path]:
+        """Normalize one or more explicitly selected Fab index paths."""
+
+        values: Iterable[Union[str, Path]] = (
+            database_paths if database_paths is not None else [database_path]
+        )
+        result: List[Path] = []
+        seen = set()
+        for value in values:
+            path = Path(value).expanduser().resolve()
+            key = str(path).casefold()
+            if key not in seen:
+                result.append(path)
+                seen.add(key)
+        return result
+
+    def discover_library_databases(
+        self,
+        search_roots: Optional[Sequence[Union[str, Path]]] = None,
+        *,
+        max_depth: int = 6,
+    ) -> Dict[str, Any]:
+        """Find local Fab indexes below caller-approved roots without writing."""
+
+        if max_depth < 0 or max_depth > 12:
+            return {
+                "operation": "fab.library_sources",
+                "read_only": True,
+                "databases": [],
+                "error": "max_depth must be between 0 and 12",
+            }
+        roots = [DEFAULT_FAB_LIBRARY_DB.parent.parent]
+        if search_roots:
+            roots.extend(Path(item).expanduser() for item in search_roots)
+        databases: List[Path] = []
+        seen = set()
+        for root_value in roots:
+            root = root_value.resolve()
+            if not root.is_dir() or root.is_symlink():
+                continue
+            for candidate in root.rglob("listings_v1.db"):
+                if candidate.is_symlink() or not candidate.is_file():
+                    continue
+                try:
+                    relative_depth = len(candidate.parent.relative_to(root).parts)
+                except ValueError:
+                    continue
+                if relative_depth > max_depth:
+                    continue
+                resolved = candidate.resolve()
+                key = str(resolved).casefold()
+                if key not in seen:
+                    databases.append(resolved)
+                    seen.add(key)
+        databases.sort(key=lambda value: str(value).casefold())
+        return {
+            "operation": "fab.library_sources",
+            "read_only": True,
+            "search_roots": [str(Path(item).expanduser().resolve()) for item in roots],
+            "databases": [str(item) for item in databases],
+        }
+
+    def list_local_libraries(
+        self,
+        database_paths: Optional[Sequence[Union[str, Path]]] = None,
+        *,
+        search_roots: Optional[Sequence[Union[str, Path]]] = None,
+        max_depth: int = 6,
+    ) -> Dict[str, Any]:
+        """Read and merge multiple Epic Fab indexes, preferring downloaded entries."""
+
+        discovered = self.discover_library_databases(search_roots, max_depth=max_depth)
+        paths = self._database_path_list(database_paths=database_paths)
+        if database_paths is None:
+            paths = [Path(item) for item in discovered.get("databases", [])]
+        sources = []
+        merged: Dict[str, Dict[str, Any]] = {}
+        for path in paths:
+            library = self.list_local_library(path)
+            assets = library.get("assets", [])
+            sources.append(
+                {
+                    "db_path": str(path),
+                    "read_only": True,
+                    "asset_count": len(assets),
+                    "error": library.get("error"),
+                }
+            )
+            for asset in assets:
+                uid = str(asset.get("uid") or "")
+                if not uid:
+                    continue
+                candidate = {**asset, "database_path": str(path)}
+                current = merged.get(uid)
+                if current is None:
+                    merged[uid] = candidate
+                    continue
+                current_score = (
+                    bool(current.get("owned")),
+                    bool(current.get("downloaded")),
+                    bool(current.get("path")),
+                )
+                candidate_score = (
+                    bool(candidate.get("owned")),
+                    bool(candidate.get("downloaded")),
+                    bool(candidate.get("path")),
+                )
+                if candidate_score > current_score:
+                    merged[uid] = candidate
+        assets = sorted(merged.values(), key=lambda item: str(item.get("title", "")).casefold())
+        return {
+            "operation": "fab.library_sources",
+            "read_only": True,
+            "database_count": len(sources),
+            "unique_asset_count": len(assets),
+            "owned_downloaded_count": sum(
+                1 for item in assets if item.get("owned") and item.get("downloaded")
+            ),
+            "not_downloaded_count": sum(1 for item in assets if not item.get("downloaded")),
+            "sources": sources,
+            "assets": assets,
+        }
+
     def inspect_local_asset(
         self, asset_id: str, database_path: Union[str, Path] = DEFAULT_FAB_LIBRARY_DB
     ) -> Dict[str, Any]:
@@ -149,15 +302,17 @@ class FabService:
         database_path: Union[str, Path] = DEFAULT_FAB_LIBRARY_DB,
         *,
         destination_subdir: str = "Fab",
+        cache_roots: Optional[Sequence[Union[str, Path]]] = None,
         confirmed: bool = False,
         dry_run: bool = True,
     ) -> OperationResult:
         """Plan or import an already downloaded, owned Unreal Fab asset.
 
         This operation deliberately does not contact Fab or modify Epic's cache
-        database. It copies only Unreal ``Content`` files from a cache path
-        indexed by Epic's read-only library database and records provenance in a
-        project-local manifest. Existing imported content is never overwritten.
+        database. It copies Unreal ``Content`` packages or supported source
+        files from a cache path indexed by Epic's read-only library database and
+        records provenance in a project-local manifest. Existing imported
+        content is never overwritten.
         """
 
         project = resolve_allowed_project(project_path, allowed_root)
@@ -221,32 +376,43 @@ class FabService:
                     "side_effects_performed": False,
                 },
             )
-        cache_root = DEFAULT_FAB_CACHE_ROOT.expanduser().resolve()
+        approved_cache_roots = [DEFAULT_FAB_CACHE_ROOT.expanduser().resolve()]
+        if cache_roots:
+            approved_cache_roots.extend(
+                Path(item).expanduser().resolve() for item in cache_roots
+            )
+        unique_cache_roots: List[Path] = []
+        seen_cache_roots = set()
+        for cache_root in approved_cache_roots:
+            key = str(cache_root).casefold()
+            if key not in seen_cache_roots:
+                unique_cache_roots.append(cache_root)
+                seen_cache_roots.add(key)
         source = Path(str(source_value)).expanduser().resolve()
-        try:
-            source.relative_to(cache_root)
-        except ValueError:
+        if not any(
+            self._is_relative_to(source, cache_root) for cache_root in unique_cache_roots
+        ):
             return OperationResult(
                 CapabilityState.UNAVAILABLE,
                 "fab.import_cached_asset",
-                "cache path is outside Epic's approved VaultCache root",
+                "cache path is outside Epic's approved VaultCache roots",
                 {
                     "asset_id": asset_id,
-                    "cache_root": str(cache_root),
+                    "cache_roots": [str(item) for item in unique_cache_roots],
                     "source": str(source),
                     "side_effects_performed": False,
                 },
             )
         content = source / "data" / "Content"
+        import_mode = "unreal-content"
         if not content.is_dir():
             content = source / "Content"
         if not content.is_dir():
-            return OperationResult(
-                CapabilityState.UNAVAILABLE,
-                "fab.import_cached_asset",
-                "cached asset does not contain an Unreal Content directory",
-                {"asset_id": asset_id, "source": str(source), "side_effects_performed": False},
-            )
+            # Fab also stores FBX/GLTF/OBJ/USD downloads as source files rather
+            # than Unreal Content packages. Preserve those files and textures
+            # under Content/Fab so Unreal can import them on the next scan.
+            import_mode = "source-files"
+            content = source.parent if source.is_file() else source
         files = []
         total_bytes = 0
         for candidate in sorted(content.rglob("*")):
@@ -262,7 +428,12 @@ class FabService:
                     "cached asset contains a file outside its Content root",
                     {"asset_id": asset_id, "file": str(candidate), "side_effects_performed": False},
                 )
-            if candidate.suffix.lower() not in _ALLOWED_CONTENT_EXTENSIONS:
+            allowed_extensions = (
+                _ALLOWED_CONTENT_EXTENSIONS
+                if import_mode == "unreal-content"
+                else _ALLOWED_SOURCE_EXTENSIONS
+            )
+            if candidate.suffix.lower() not in allowed_extensions:
                 continue
             size = candidate.stat().st_size
             files.append({"path": relative.as_posix(), "size": size})
@@ -271,7 +442,7 @@ class FabService:
             return OperationResult(
                 CapabilityState.UNAVAILABLE,
                 "fab.import_cached_asset",
-                "cached asset contains no supported Unreal content files",
+                "cached asset contains no supported Unreal or source files",
                 {"asset_id": asset_id, "source": str(source), "side_effects_performed": False},
             )
 
@@ -303,6 +474,7 @@ class FabService:
             "destination": str(destination),
             "file_count": len(files),
             "total_bytes": total_bytes,
+            "import_mode": import_mode,
             "files": files,
             "owned": True,
             "price_verified": False,
@@ -402,28 +574,41 @@ class FabService:
         allowed_root: Union[str, Path],
         database_path: Union[str, Path] = DEFAULT_FAB_LIBRARY_DB,
         *,
+        database_paths: Optional[Sequence[Union[str, Path]]] = None,
+        cache_roots: Optional[Sequence[Union[str, Path]]] = None,
         confirmed: bool = False,
         dry_run: bool = True,
     ) -> Dict[str, Any]:
         """Plan/import every downloaded and owned local Fab Unreal asset."""
 
-        library = self.list_local_library(database_path)
+        paths = self._database_path_list(database_path, database_paths)
         results = []
-        for asset in library.get("assets", []):
-            if not asset.get("owned") or not asset.get("downloaded"):
-                continue
-            result = self.plan_import_cached_asset(
-                str(asset["uid"]),
-                project_path,
-                allowed_root,
-                database_path,
-                confirmed=confirmed,
-                dry_run=dry_run,
-            )
-            results.append(result.as_dict())
+        seen_assets = set()
+        for source_database in paths:
+            library = self.list_local_library(source_database)
+            for asset in library.get("assets", []):
+                asset_id = str(asset.get("uid") or "")
+                if (
+                    not asset_id
+                    or asset_id in seen_assets
+                    or not asset.get("owned")
+                    or not asset.get("downloaded")
+                ):
+                    continue
+                seen_assets.add(asset_id)
+                result = self.plan_import_cached_asset(
+                    asset_id,
+                    project_path,
+                    allowed_root,
+                    source_database,
+                    cache_roots=cache_roots,
+                    confirmed=confirmed,
+                    dry_run=dry_run,
+                )
+                results.append(result.as_dict())
         return {
             "operation": "fab.import_all_cached",
-            "database_path": str(Path(database_path).expanduser().resolve()),
+            "database_paths": [str(item) for item in paths],
             "count": len(results),
             "results": results,
             "side_effects_performed": any(
