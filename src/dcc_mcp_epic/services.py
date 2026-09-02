@@ -527,7 +527,12 @@ class EpicService:
                 "Fab Launcher does not batch-download UE native content; use add_to_project",
                 {
                     "format": format,
-                    "next_operation": "fab.add_to_project.request",
+                    "next_operation": (
+                        "fab.add_to_project.request"
+                        if len(values) == 1
+                        else "fab.add_to_project_batch.request"
+                    ),
+                    "asset_count": len(values),
                     "side_effects_performed": False,
                 },
             )

@@ -547,6 +547,12 @@ def test_typed_fab_download_batch_rejects_unreal_native(tmp_path):
     assert result.state is CapabilityState.UNAVAILABLE
     assert result.details["next_operation"] == "fab.add_to_project.request"
 
+    batch = EpicService().fab_download_batch_request(
+        ["asset-1", "asset-2"], tmp_path, tmp_path, manifest, owned=True
+    )
+    assert batch.details["next_operation"] == "fab.add_to_project_batch.request"
+    assert batch.details["asset_count"] == 2
+
 
 def test_typed_fab_add_to_project_request_is_dry_run(tmp_path):
     manifest = _hook_manifest(tmp_path, ["fab.add_to_project.request"])
