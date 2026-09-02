@@ -19,6 +19,12 @@ no generic UI automation fallback.
   exists.
 - Multi-source Fab inventory: available, read-only, merges explicitly selected
   indexes and can discover `listings_v1.db` below caller-approved roots.
+- Fab Add to My Library: available through a declared user-owned hook for
+  explicitly-free listings, with bounded batch support (up to 100 IDs), exact
+  optional Launcher identity, and mandatory post-action ownership evidence.
+- Fab library sync: available through a scoped user-owned hook keyed to the
+  Launcher PID and approved cache/index roots; the adapter never edits Epic's
+  databases directly.
 - Fab download status: available, read-only, re-reads ownership, path and
   cache evidence after a user-owned download hook.
 - Cached Fab import: available for already-owned/downloaded Unreal Content;
@@ -106,6 +112,20 @@ uv run dcc-mcp-epic-cli fab-search-request Arrow `
   --hook-manifest C:\path\hook.json --search-root C:\ProgramData\Epic
 uv run dcc-mcp-epic-cli fab-library-request `
   --hook-manifest C:\path\hook.json --database C:\path\listings_v1.db
+uv run dcc-mcp-epic-cli fab-add-to-library-request <asset-id> `
+  --hook-manifest C:\path\hook.json --free-listing `
+  --launcher-pid <EpicLauncherPID> --launcher-hwnd <EpicLauncherHWND> `
+  --launcher-executable C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe
+uv run dcc-mcp-epic-cli fab-add-to-library-batch-request `
+  <asset-id-1> <asset-id-2> --hook-manifest C:\path\hook.json `
+  --free-listing --launcher-pid <EpicLauncherPID> `
+  --launcher-hwnd <EpicLauncherHWND> `
+  --launcher-executable C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe
+uv run dcc-mcp-epic-cli fab-library-sync-request `
+  --launcher-pid <EpicLauncherPID> --allowed-root F:\UE `
+  --hook-manifest C:\path\hook.json `
+  --database F:\UE\EpicGamesLauncher\VaultCache\FabLibrary\listings_v1.db `
+  --cache-root F:\UE\EpicGamesLauncher\VaultCache
 uv run dcc-mcp-epic-cli fab-download-status-request <asset-id> `
   --hook-manifest C:\path\hook.json --database C:\path\listings_v1.db
 uv run dcc-mcp-epic-cli fab-import-inventory-request P:\game-test\ue-arpg `

@@ -319,6 +319,80 @@ def epic_fab_library_sources_request(
     ).as_dict()
 
 
+def epic_fab_add_to_library_request(
+    asset_id: str,
+    hook_manifest: str,
+    expected_price: float = 0,
+    free_listing: bool = False,
+    launcher_pid: Optional[int] = None,
+    launcher_hwnd: Optional[int] = None,
+    launcher_executable: Optional[str] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Add one explicitly-free Fab listing to the account via a hook."""
+
+    return _service.fab_add_to_library_request(
+        asset_id,
+        hook_manifest,
+        expected_price=expected_price,
+        free_listing=free_listing,
+        launcher_pid=launcher_pid,
+        launcher_hwnd=launcher_hwnd,
+        launcher_executable=launcher_executable,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_fab_add_to_library_batch_request(
+    asset_ids: List[str],
+    hook_manifest: str,
+    expected_price: float = 0,
+    free_listing: bool = False,
+    launcher_pid: Optional[int] = None,
+    launcher_hwnd: Optional[int] = None,
+    launcher_executable: Optional[str] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch a bounded per-asset Add to My Library sequence."""
+
+    return _service.fab_add_to_library_batch_request(
+        asset_ids,
+        hook_manifest,
+        expected_price=expected_price,
+        free_listing=free_listing,
+        launcher_pid=launcher_pid,
+        launcher_hwnd=launcher_hwnd,
+        launcher_executable=launcher_executable,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_fab_library_sync_request(
+    launcher_pid: int,
+    allowed_root: str,
+    hook_manifest: str,
+    database_paths: Optional[List[str]] = None,
+    cache_roots: Optional[List[str]] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Refresh local Fab indexes through a scoped user-owned hook."""
+
+    return _service.fab_library_sync_request(
+        launcher_pid,
+        allowed_root,
+        hook_manifest,
+        database_paths=database_paths,
+        cache_roots=cache_roots,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 def epic_fab_download_status_request(
     asset_id: str,
     hook_manifest: str,
@@ -780,6 +854,9 @@ if FastMCP is not None:
         epic_fab_library_request,
         epic_fab_library_sources,
         epic_fab_library_sources_request,
+        epic_fab_add_to_library_request,
+        epic_fab_add_to_library_batch_request,
+        epic_fab_library_sync_request,
         epic_fab_asset_inspect,
         epic_fab_search,
         epic_fab_search_request,

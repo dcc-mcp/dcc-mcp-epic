@@ -40,6 +40,48 @@ def build_parser() -> argparse.ArgumentParser:
     fab_library_request.add_argument("--database", default=None)
     fab_library_request.add_argument("--confirmed", action="store_true")
     fab_library_request.add_argument("--execute", action="store_true")
+    fab_add_library = sub.add_parser("fab-add-to-library-request")
+    fab_add_library.add_argument("asset_id")
+    fab_add_library.add_argument("--hook-manifest", required=True)
+    fab_add_library.add_argument("--expected-price", type=float, default=0)
+    fab_add_library.add_argument(
+        "--free-listing", action="store_true",
+        help="Explicitly assert that the current listing is free before account mutation",
+    )
+    fab_add_library.add_argument("--launcher-pid", type=int, default=None)
+    fab_add_library.add_argument("--launcher-hwnd", type=int, default=None)
+    fab_add_library.add_argument("--launcher-executable", type=Path, default=None)
+    fab_add_library.add_argument("--confirmed", action="store_true")
+    fab_add_library.add_argument("--execute", action="store_true")
+    fab_add_library_batch = sub.add_parser("fab-add-to-library-batch-request")
+    fab_add_library_batch.add_argument(
+        "asset_ids", nargs="+", help="One or more Fab asset ids (max 100)"
+    )
+    fab_add_library_batch.add_argument("--hook-manifest", required=True)
+    fab_add_library_batch.add_argument("--expected-price", type=float, default=0)
+    fab_add_library_batch.add_argument(
+        "--free-listing", action="store_true",
+        help="Explicitly assert that the current listings are free before account mutation",
+    )
+    fab_add_library_batch.add_argument("--launcher-pid", type=int, default=None)
+    fab_add_library_batch.add_argument("--launcher-hwnd", type=int, default=None)
+    fab_add_library_batch.add_argument("--launcher-executable", type=Path, default=None)
+    fab_add_library_batch.add_argument("--confirmed", action="store_true")
+    fab_add_library_batch.add_argument("--execute", action="store_true")
+    fab_library_sync = sub.add_parser("fab-library-sync-request")
+    fab_library_sync.add_argument("--launcher-pid", type=int, required=True)
+    fab_library_sync.add_argument("--allowed-root", required=True)
+    fab_library_sync.add_argument("--hook-manifest", required=True)
+    fab_library_sync.add_argument(
+        "--database", dest="databases", action="append", default=None,
+        help="Approved listings_v1.db path; repeat for multiple indexes",
+    )
+    fab_library_sync.add_argument(
+        "--cache-root", dest="cache_roots", action="append", default=None,
+        help="Approved VaultCache root; repeat for multiple locations",
+    )
+    fab_library_sync.add_argument("--confirmed", action="store_true")
+    fab_library_sync.add_argument("--execute", action="store_true")
     fab_sources = sub.add_parser("fab-library-sources")
     fab_sources.add_argument(
         "--database", dest="databases", action="append", default=None,
@@ -367,6 +409,46 @@ def main(argv: Optional[List[str]] = None) -> int:
             service.fab_library_request(
                 args.hook_manifest,
                 database_path=args.database,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "fab-add-to-library-request":
+        _dump(
+            service.fab_add_to_library_request(
+                args.asset_id,
+                args.hook_manifest,
+                expected_price=args.expected_price,
+                free_listing=args.free_listing,
+                launcher_pid=args.launcher_pid,
+                launcher_hwnd=args.launcher_hwnd,
+                launcher_executable=args.launcher_executable,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "fab-add-to-library-batch-request":
+        _dump(
+            service.fab_add_to_library_batch_request(
+                args.asset_ids,
+                args.hook_manifest,
+                expected_price=args.expected_price,
+                free_listing=args.free_listing,
+                launcher_pid=args.launcher_pid,
+                launcher_hwnd=args.launcher_hwnd,
+                launcher_executable=args.launcher_executable,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "fab-library-sync-request":
+        _dump(
+            service.fab_library_sync_request(
+                args.launcher_pid,
+                args.allowed_root,
+                args.hook_manifest,
+                database_paths=args.databases,
+                cache_roots=args.cache_roots,
                 confirmed=args.confirmed,
                 dry_run=not args.execute,
             ).as_dict()

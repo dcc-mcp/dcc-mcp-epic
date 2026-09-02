@@ -7,7 +7,7 @@ import psutil
 
 from .hooks import HOOK_OPERATIONS, invoke_hook, load_hook_manifest, probe_hook
 from .models import CapabilityState, LauncherBinding, OperationResult
-from .policy import require_free_asset, resolve_allowed_project
+from .policy import require_free_asset, require_free_listing, resolve_allowed_project
 from .providers.epic_launcher.manifest import DEFAULT_MANIFEST_ROOT, list_engine_installs
 from .providers.epic_launcher.runtime import bind_launcher
 from .providers.fab.bridge import DEFAULT_FAB_STATUS_PORT, probe_fab_status_listener
@@ -603,6 +603,251 @@ class EpicService:
                 "fab.download_status",
                 "local Fab download evidence was read before invoking the provider hook",
                 local,
+            ),
+        )
+
+    def fab_add_to_library_request(
+        self,
+        asset_id: str,
+        hook_manifest: Union[str, Path],
+        *,
+        expected_price: Union[int, float] = 0,
+        free_listing: bool = False,
+        launcher_pid: Optional[int] = None,
+        launcher_hwnd: Optional[int] = None,
+        launcher_executable: Optional[Union[str, Path]] = None,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Add one explicitly-free Fab listing to the user's library.
+
+        This is intentionally separate from ``fab.download``: adding to the
+        library establishes account ownership and may require an Epic UI or
+        official bridge.  The adapter only validates the free-price assertion
+        and an optional exact Launcher identity; the declared hook performs
+        the action and must return fresh ownership evidence.
+        """
+
+        operation = "fab.add_to_library.request"
+        if not isinstance(asset_id, str) or not asset_id.strip():
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "asset_id must not be empty",
+                {"side_effects_performed": False},
+            )
+        try:
+            require_free_listing(expected_price, free_listing)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.HUMAN_REQUIRED,
+                operation,
+                str(exc),
+                {"asset_id": asset_id, "side_effects_performed": False},
+            )
+        binding_values = (launcher_pid, launcher_hwnd, launcher_executable)
+        if any(value is not None for value in binding_values):
+            if not all(value is not None for value in binding_values):
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "launcher_pid, launcher_hwnd, and launcher_executable must be "
+                    "provided together",
+                    {"asset_id": asset_id, "side_effects_performed": False},
+                )
+            if int(launcher_pid or 0) <= 0 or int(launcher_hwnd or 0) <= 0:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "launcher_pid and launcher_hwnd must be positive",
+                    {"asset_id": asset_id, "side_effects_performed": False},
+                )
+            executable = Path(launcher_executable).expanduser().resolve()
+            if not executable.is_absolute() or not executable.is_file():
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "launcher_executable must be an existing absolute file",
+                    {"asset_id": asset_id, "side_effects_performed": False},
+                )
+        else:
+            executable = None
+        payload: Dict[str, Any] = {
+            "asset_id": asset_id.strip(),
+            "expected_price": expected_price,
+            "free_listing": True,
+            "action": "add_to_library",
+            "verification_required": (
+                "re-read Epic/Fab ownership and local library evidence after the hook"
+            ),
+        }
+        if launcher_pid is not None:
+            payload["launcher_pid"] = int(launcher_pid)
+            payload["launcher_hwnd"] = int(launcher_hwnd or 0)
+            payload["launcher_executable"] = str(executable)
+        return self._typed_hook_request(
+            operation,
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+        )
+
+    def fab_add_to_library_batch_request(
+        self,
+        asset_ids: Sequence[str],
+        hook_manifest: Union[str, Path],
+        *,
+        expected_price: Union[int, float] = 0,
+        free_listing: bool = False,
+        launcher_pid: Optional[int] = None,
+        launcher_hwnd: Optional[int] = None,
+        launcher_executable: Optional[Union[str, Path]] = None,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Dispatch a bounded per-asset Fab Add to My Library sequence."""
+
+        operation = "fab.add_to_library_batch.request"
+        try:
+            require_free_listing(expected_price, free_listing)
+        except ValueError as exc:
+            return OperationResult(
+                CapabilityState.HUMAN_REQUIRED,
+                operation,
+                str(exc),
+                {"side_effects_performed": False},
+            )
+        values = [str(item).strip() for item in asset_ids if str(item).strip()]
+        if not values:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "asset_ids must contain at least one non-empty id",
+                {"side_effects_performed": False},
+            )
+        if len(values) > 100:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "asset_ids is limited to 100 entries per request",
+                {"count": len(values), "side_effects_performed": False},
+            )
+        if len(set(values)) != len(values):
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "asset_ids must not contain duplicates",
+                {"side_effects_performed": False},
+            )
+        binding_values = (launcher_pid, launcher_hwnd, launcher_executable)
+        if any(value is not None for value in binding_values):
+            if not all(value is not None for value in binding_values):
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "launcher_pid, launcher_hwnd, and launcher_executable must be "
+                    "provided together",
+                    {"side_effects_performed": False},
+                )
+            if int(launcher_pid or 0) <= 0 or int(launcher_hwnd or 0) <= 0:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "launcher_pid and launcher_hwnd must be positive",
+                    {"side_effects_performed": False},
+                )
+            executable = Path(launcher_executable).expanduser().resolve()
+            if not executable.is_absolute() or not executable.is_file():
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "launcher_executable must be an existing absolute file",
+                    {"side_effects_performed": False},
+                )
+        else:
+            executable = None
+        payload: Dict[str, Any] = {
+            "assets": [
+                {
+                    "asset_id": asset_id,
+                    "expected_price": expected_price,
+                    "free_listing": True,
+                    "action": "add_to_library",
+                }
+                for asset_id in values
+            ],
+            "verification_required": (
+                "re-read each asset's Epic/Fab ownership and local library evidence"
+            ),
+            "execution_contract": "one official Add to My Library action per asset",
+        }
+        if launcher_pid is not None:
+            payload["launcher"] = {
+                "pid": int(launcher_pid),
+                "hwnd": int(launcher_hwnd or 0),
+                "executable": str(executable),
+            }
+        return self._typed_hook_request(
+            operation,
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+        )
+
+    def fab_library_sync_request(
+        self,
+        launcher_pid: int,
+        allowed_root: Union[str, Path],
+        hook_manifest: Union[str, Path],
+        *,
+        database_paths: Optional[Sequence[Union[str, Path]]] = None,
+        cache_roots: Optional[Sequence[Union[str, Path]]] = None,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Refresh the local Fab index through a scoped user-owned hook."""
+
+        operation = "fab.library_sync.request"
+        if int(launcher_pid) <= 0:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "launcher_pid must be positive",
+                {"side_effects_performed": False},
+            )
+        root = Path(allowed_root).expanduser().resolve()
+        payload: Dict[str, Any] = {
+            "launcher_pid": int(launcher_pid),
+            "allowed_root": str(root),
+            "verification_required": "re-read Fab library sources after the hook",
+        }
+        for field, values in (("database_paths", database_paths), ("cache_roots", cache_roots)):
+            if values:
+                scoped: list[str] = []
+                for value in values:
+                    try:
+                        scoped.append(str(resolve_allowed_project(value, root)))
+                    except ValueError as exc:
+                        return OperationResult(
+                            CapabilityState.UNAVAILABLE,
+                            operation,
+                            str(exc),
+                            {"field": field, "side_effects_performed": False},
+                        )
+                payload[field] = scoped
+        return self._typed_hook_request(
+            operation,
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "fab.library_sync",
+                "sync scope was validated; no local index mutation was performed by the adapter",
+                {"launcher_pid": int(launcher_pid), "allowed_root": str(root)},
             ),
         )
 

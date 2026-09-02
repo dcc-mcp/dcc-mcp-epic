@@ -493,6 +493,17 @@ def test_hook_contract_describes_mutation_and_required_fields():
         "assets",
         "project_path",
     ]
+    assert operations["fab.add_to_library.request"]["mutating"] is True
+    assert operations["fab.add_to_library.request"]["required_fields"] == [
+        "asset_id",
+        "expected_price",
+        "free_listing",
+    ]
+    assert operations["fab.add_to_library_batch.request"]["mutating"] is True
+    assert operations["fab.library_sync.request"]["required_fields"] == [
+        "launcher_pid",
+        "allowed_root",
+    ]
     assert operations["fab.library_sources.request"]["mutating"] is False
 
 
@@ -599,6 +610,75 @@ def test_typed_fab_add_to_project_batch_rejects_duplicates(tmp_path):
     )
     assert result.state is CapabilityState.UNAVAILABLE
     assert "duplicates" in result.message
+
+
+def test_typed_fab_add_to_library_requires_explicit_free_listing(tmp_path):
+    manifest = _hook_manifest(tmp_path, ["fab.add_to_library.request"])
+    blocked = EpicService().fab_add_to_library_request(
+        "asset-1", manifest, free_listing=False, confirmed=True
+    )
+    assert blocked.state is CapabilityState.HUMAN_REQUIRED
+    assert "free listing" in blocked.message
+
+    dry_run = EpicService().fab_add_to_library_request(
+        "asset-1", manifest, free_listing=True, confirmed=True
+    )
+    assert dry_run.state is CapabilityState.READ_ONLY
+    assert dry_run.operation == "fab.add_to_library.request"
+    assert dry_run.details["payload"]["action"] == "add_to_library"
+    assert dry_run.details["payload"]["free_listing"] is True
+    assert dry_run.details["side_effects_performed"] is False
+
+
+def test_typed_fab_add_to_library_batch_is_bounded_and_scoped(tmp_path):
+    manifest = _hook_manifest(tmp_path, ["fab.add_to_library_batch.request"])
+    dry_run = EpicService().fab_add_to_library_batch_request(
+        ["asset-1", "asset-2"], manifest, free_listing=True, confirmed=True
+    )
+    assert dry_run.state is CapabilityState.READ_ONLY
+    assert dry_run.operation == "fab.add_to_library_batch.request"
+    assert [item["asset_id"] for item in dry_run.details["payload"]["assets"]] == [
+        "asset-1",
+        "asset-2",
+    ]
+    assert dry_run.details["payload"]["execution_contract"] == (
+        "one official Add to My Library action per asset"
+    )
+
+    duplicate = EpicService().fab_add_to_library_batch_request(
+        ["asset-1", "asset-1"], manifest, free_listing=True, confirmed=True
+    )
+    assert duplicate.state is CapabilityState.UNAVAILABLE
+    assert "duplicates" in duplicate.message
+
+
+def test_typed_fab_library_sync_scopes_paths_and_is_dry_run(tmp_path):
+    manifest = _hook_manifest(tmp_path, ["fab.library_sync.request"])
+    cache = tmp_path / "VaultCache"
+    database = cache / "FabLibrary" / "listings_v1.db"
+    dry_run = EpicService().fab_library_sync_request(
+        4048,
+        tmp_path,
+        manifest,
+        database_paths=[database],
+        cache_roots=[cache],
+        confirmed=True,
+    )
+    assert dry_run.state is CapabilityState.READ_ONLY
+    assert dry_run.operation == "fab.library_sync.request"
+    assert dry_run.details["payload"]["launcher_pid"] == 4048
+    assert dry_run.details["payload"]["database_paths"] == [str(database.resolve())]
+    assert dry_run.details["side_effects_performed"] is False
+
+    outside = EpicService().fab_library_sync_request(
+        4048,
+        tmp_path,
+        manifest,
+        cache_roots=[tmp_path.parent],
+        confirmed=True,
+    )
+    assert outside.state is CapabilityState.UNAVAILABLE
+    assert "outside allowed root" in outside.message
 
 
 def test_typed_engine_install_request_requires_scope_for_install_root(tmp_path):
