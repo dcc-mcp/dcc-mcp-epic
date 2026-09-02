@@ -583,29 +583,27 @@ class FabService:
 
         paths = self._database_path_list(database_path, database_paths)
         results = []
-        seen_assets = set()
-        for source_database in paths:
-            library = self.list_local_library(source_database)
-            for asset in library.get("assets", []):
-                asset_id = str(asset.get("uid") or "")
-                if (
-                    not asset_id
-                    or asset_id in seen_assets
-                    or not asset.get("owned")
-                    or not asset.get("downloaded")
-                ):
-                    continue
-                seen_assets.add(asset_id)
-                result = self.plan_import_cached_asset(
-                    asset_id,
-                    project_path,
-                    allowed_root,
-                    source_database,
-                    cache_roots=cache_roots,
-                    confirmed=confirmed,
-                    dry_run=dry_run,
-                )
-                results.append(result.as_dict())
+        library = self.list_local_libraries(paths)
+        for asset in library.get("assets", []):
+            asset_id = str(asset.get("uid") or "")
+            source_database = asset.get("database_path")
+            if (
+                not asset_id
+                or not isinstance(source_database, str)
+                or not asset.get("owned")
+                or not asset.get("downloaded")
+            ):
+                continue
+            result = self.plan_import_cached_asset(
+                asset_id,
+                project_path,
+                allowed_root,
+                source_database,
+                cache_roots=cache_roots,
+                confirmed=confirmed,
+                dry_run=dry_run,
+            )
+            results.append(result.as_dict())
         return {
             "operation": "fab.import_all_cached",
             "database_paths": [str(item) for item in paths],
