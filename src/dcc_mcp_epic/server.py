@@ -8,6 +8,7 @@ try:
 except ImportError:  # pragma: no cover - exercised in a minimal Python 3.9 install
     FastMCP = None  # type: ignore[assignment,misc]
 
+from .cua_preflight import preflight_launcher
 from .hooks import hook_contract
 from .models import LauncherBinding
 from .providers.epic_launcher.manifest import DEFAULT_MANIFEST_ROOT
@@ -35,6 +36,24 @@ def epic_runtime_doctor() -> Dict[str, Any]:
     """Report reusable DCC-MCP and standalone runtime options."""
 
     return runtime_doctor()
+
+
+def epic_cua_preflight(
+    pid: int,
+    hwnd: int,
+    executable: str,
+    cua_command: Optional[List[str]] = None,
+    timeout_seconds: int = 10,
+) -> Dict[str, Any]:
+    """Check the project-owned dcc-cua route without sending input."""
+
+    return preflight_launcher(
+        pid,
+        hwnd,
+        executable,
+        cua_command=cua_command,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def epic_hook_contract() -> Dict[str, Any]:
@@ -972,6 +991,7 @@ if FastMCP is not None:
     for _tool in (
         epic_capabilities,
         epic_runtime_doctor,
+        epic_cua_preflight,
         epic_hook_contract,
         epic_fab_worker_manifest,
         epic_engine_list_installed,

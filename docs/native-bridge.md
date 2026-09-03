@@ -84,6 +84,13 @@ selectors and generic automation are not part of this contract. A hook must
 capture the exact window again and report whether the intended effect was
 observed.
 
+Before invoking that action surface, callers can use the read-only
+`cua-preflight` CLI/MCP tool. It runs only the official dcc-cua `--version`,
+`ping`, `doctor --route visual`, and exact-window `list` checks. A degraded
+diagnostic (including a disconnected Windows session) is returned as typed
+`blocked` evidence with a next action; it never sends input or silently falls
+back to generic automation.
+
 `epic_fab_download_request` is the typed hook entry for a user-owned download
 bridge. It rejects non-zero prices and unverified ownership, sends only the
 asset/project/format/quality payload, defaults to dry-run, and reports the
