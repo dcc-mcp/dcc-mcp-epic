@@ -43,6 +43,7 @@ class EpicService:
             "engine.verify": CapabilityState.READ_ONLY.value,
             "launcher.status_request": "available_if_declared_read_only_hook",
             "launcher.action_request": "available_if_declared_dcc_cua_hook",
+            "launcher.cua_preflight": CapabilityState.READ_ONLY.value,
             "engine.install.request": "available_if_declared_hook",
             "engine.update.request": "available_if_declared_hook",
             "engine.download.request": "available_if_declared_hook",

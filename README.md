@@ -16,6 +16,10 @@ no generic UI automation fallback.
   bounded click/key/scroll/text actions. The request requires a live
   PID/HWND/executable tuple, a known input backend, and post-action evidence;
   semantic selectors and generic automation are rejected.
+- dcc-cua preflight: available as a read-only `cua-preflight` CLI/MCP tool. It
+  checks the official runtime, ping, visual diagnostics, and exact window
+  binding before any UI action; degraded diagnostics are reported as blocked
+  instead of being retried as input.
 - Fab search: read-only local index search. Fab download/export are available
   only through a declared user-owned hook; the adapter never automates login,
   CAPTCHA, 2FA, purchase, or license acceptance.
@@ -120,6 +124,9 @@ uv build
 ```powershell
 uv run dcc-mcp-epic-cli capabilities
 uv run dcc-mcp-epic-cli runtime-doctor
+uv run dcc-mcp-epic-cli cua-preflight `
+  --pid <EpicLauncherPID> --hwnd <EpicLauncherHWND> `
+  --executable 'C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe'
 uv run dcc-mcp-epic-cli hook-contract
 uv run dcc-mcp-epic-cli engines
 uv run dcc-mcp-epic-cli project-verify P:\game-test\ue-arpg\RiftKidsARPG.uproject

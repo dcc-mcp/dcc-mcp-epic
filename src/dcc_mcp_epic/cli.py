@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
+from .cua_preflight import preflight_launcher
 from .models import LauncherBinding
 from .providers.epic_launcher.manifest import DEFAULT_MANIFEST_ROOT
 from .providers.fab.bridge import (
@@ -29,6 +30,20 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("capabilities")
     sub.add_parser("runtime-doctor")
+    cua_preflight = sub.add_parser(
+        "cua-preflight",
+        help="Read-only dcc-cua readiness check for one exact Launcher window",
+    )
+    cua_preflight.add_argument("--pid", type=int, required=True)
+    cua_preflight.add_argument("--hwnd", type=int, required=True)
+    cua_preflight.add_argument("--executable", type=Path, required=True)
+    cua_preflight.add_argument(
+        "--cua-path",
+        type=Path,
+        default=None,
+        help="Absolute dcc-cua executable; defaults to the configured official binary",
+    )
+    cua_preflight.add_argument("--timeout-seconds", type=int, default=10)
     sub.add_parser("hook-contract")
     worker_manifest = sub.add_parser(
         "fab-worker-manifest",
@@ -569,6 +584,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         _dump(service.capabilities())
     elif args.command == "runtime-doctor":
         _dump(runtime_doctor())
+    elif args.command == "cua-preflight":
+        cua_command = [str(args.cua_path.expanduser().resolve())] if args.cua_path else None
+        _dump(
+            preflight_launcher(
+                args.pid,
+                args.hwnd,
+                args.executable,
+                cua_command=cua_command,
+                timeout_seconds=args.timeout_seconds,
+            )
+        )
     elif args.command == "hook-contract":
         from .hooks import hook_contract
 
