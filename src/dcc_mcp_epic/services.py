@@ -21,6 +21,11 @@ _LAUNCHER_ACTION_BACKENDS = {
     "windows.post_message_text.v1": {"type", "type_chars"},
     "windows.post_message_scroll.v1": {"scroll"},
 }
+_FREE_ASSET_SYNC_MODES = {
+    "library_only",
+    "library_and_download",
+    "library_download_and_project",
+}
 
 
 class EpicService:
@@ -681,6 +686,117 @@ class EpicService:
             ),
         )
 
+    def fab_catalog_free_request(
+        self,
+        hook_manifest: Union[str, Path],
+        *,
+        query: str = "",
+        categories: Optional[Sequence[str]] = None,
+        formats: Optional[Sequence[str]] = None,
+        limit: int = 100,
+        cursor: str = "",
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Ask a user-owned provider hook for the current free Fab catalog.
+
+        The adapter deliberately does not scrape Fab or carry account
+        credentials.  A provider hook may use an official API or a native
+        integration and must return fresh listing evidence for every result.
+        """
+
+        operation = "fab.catalog_free.request"
+        if not isinstance(query, str) or len(query) > 256:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "query must be a string of at most 256 characters",
+                {"side_effects_performed": False},
+            )
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "limit must be an integer between 1 and 100",
+                {"limit": limit, "side_effects_performed": False},
+            )
+        if not isinstance(cursor, str) or len(cursor) > 2048:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "cursor must be a string of at most 2048 characters",
+                {"side_effects_performed": False},
+            )
+
+        def normalize_filter(name: str, values: Optional[Sequence[str]]) -> Optional[list[str]]:
+            if values is None:
+                return None
+            if isinstance(values, (str, bytes)):
+                raise ValueError(f"{name} must be a list of strings")
+            result: list[str] = []
+            seen: set[str] = set()
+            for value in values:
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError(f"{name} must contain only non-empty strings")
+                normalized = value.strip()
+                key = normalized.casefold()
+                if key not in seen:
+                    result.append(normalized)
+                    seen.add(key)
+            if len(result) > 64:
+                raise ValueError(f"{name} is limited to 64 entries")
+            return result
+
+        try:
+            normalized_categories = normalize_filter("categories", categories)
+            normalized_formats = normalize_filter("formats", formats)
+        except (TypeError, ValueError) as exc:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                str(exc),
+                {"side_effects_performed": False},
+            )
+
+        payload: Dict[str, Any] = {
+            "query": query.strip(),
+            "free_only": True,
+            "limit": limit,
+            "cursor": cursor.strip(),
+            "provider_route": "official_fab_or_native_hook",
+            "verification_required": (
+                "return asset_id, title, current price, compatible formats, "
+                "and ownership eligibility"
+            ),
+        }
+        if normalized_categories is not None:
+            payload["categories"] = normalized_categories
+        if normalized_formats is not None:
+            payload["formats"] = normalized_formats
+        plan = OperationResult(
+            CapabilityState.READ_ONLY,
+            "fab.catalog_free",
+            "free catalog lookup is delegated to a user-owned official/native "
+            "provider; no CUA is required",
+            {
+                "query": payload["query"],
+                "free_only": True,
+                "limit": limit,
+                "cursor": payload["cursor"],
+                "provider_route": payload["provider_route"],
+                "cua_calls_expected": 0,
+                "side_effects_performed": False,
+            },
+        )
+        return self._typed_hook_request(
+            operation,
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=plan,
+        )
+
     def fab_library_request(
         self,
         hook_manifest: Union[str, Path],
@@ -1176,6 +1292,364 @@ class EpicService:
                 "fab.library_sync",
                 "sync scope was validated; no local index mutation was performed by the adapter",
                 {"launcher_pid": int(launcher_pid), "allowed_root": str(root)},
+            ),
+        )
+
+    def fab_free_assets_sync_request(
+        self,
+        assets: Sequence[Dict[str, Any]],
+        allowed_root: Union[str, Path],
+        hook_manifest: Union[str, Path],
+        *,
+        mode: str = "library_and_download",
+        project_path: Optional[Union[str, Path]] = None,
+        launcher_pid: Optional[int] = None,
+        launcher_hwnd: Optional[int] = None,
+        launcher_executable: Optional[Union[str, Path]] = None,
+        launcher_version: str = "",
+        database_paths: Optional[Sequence[Union[str, Path]]] = None,
+        cache_roots: Optional[Sequence[Union[str, Path]]] = None,
+        confirmed: bool = False,
+        dry_run: bool = True,
+    ) -> OperationResult:
+        """Dispatch one idempotent free-asset sync workflow to a provider hook.
+
+        The hook owns the official account/library and download integration. A
+        single request replaces per-asset CUA clicks while retaining explicit
+        free-price assertions, project-root confinement, and postcondition
+        checks. The adapter never edits Epic's databases or handles login.
+        """
+
+        operation = "fab.free_assets_sync.request"
+        if not isinstance(mode, str) or mode not in _FREE_ASSET_SYNC_MODES:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                f"mode must be one of {sorted(_FREE_ASSET_SYNC_MODES)}",
+                {"mode": mode, "side_effects_performed": False},
+            )
+        try:
+            root = Path(allowed_root).expanduser().resolve()
+        except (OSError, TypeError, ValueError) as exc:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                f"allowed_root is invalid: {exc}",
+                {"side_effects_performed": False},
+            )
+
+        if isinstance(assets, (str, bytes)) or not isinstance(assets, Sequence):
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "assets must be a list of objects",
+                {"side_effects_performed": False},
+            )
+        if not assets:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "assets must contain at least one entry",
+                {"side_effects_performed": False},
+            )
+        if len(assets) > 100:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "assets is limited to 100 entries per request",
+                {"count": len(assets), "side_effects_performed": False},
+            )
+
+        normalized_assets: list[Dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        allowed_formats = {
+            "unreal-engine",
+            "fbx",
+            "glb",
+            "gltf",
+            "obj",
+            "usd",
+            "usdz",
+            "texture-set",
+            "unity-package",
+        }
+        for index, item in enumerate(assets):
+            if not isinstance(item, dict):
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    f"assets[{index}] must be a JSON object",
+                    {"index": index, "side_effects_performed": False},
+                )
+            asset_id = item.get("asset_id")
+            if not isinstance(asset_id, str) or not asset_id.strip() or len(asset_id.strip()) > 256:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    f"assets[{index}].asset_id must be 1-256 characters",
+                    {"index": index, "side_effects_performed": False},
+                )
+            asset_id = asset_id.strip()
+            key = asset_id.casefold()
+            if key in seen_ids:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "assets must not contain duplicate asset_id values",
+                    {"asset_id": asset_id, "side_effects_performed": False},
+                )
+            seen_ids.add(key)
+            expected_price = item.get("expected_price", 0)
+            if (
+                isinstance(expected_price, bool)
+                or not isinstance(expected_price, (int, float))
+                or not math.isfinite(float(expected_price))
+            ):
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    f"assets[{index}].expected_price must be a finite number",
+                    {"index": index, "side_effects_performed": False},
+                )
+            free_listing = item.get("free_listing")
+            try:
+                require_free_listing(expected_price, free_listing)
+            except ValueError as exc:
+                return OperationResult(
+                    CapabilityState.HUMAN_REQUIRED,
+                    operation,
+                    str(exc),
+                    {"asset_id": asset_id, "side_effects_performed": False},
+                )
+            asset_format = item.get("format", "unreal-engine")
+            if not isinstance(asset_format, str) or asset_format not in allowed_formats:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    f"assets[{index}].format is unsupported",
+                    {"asset_id": asset_id, "format": asset_format, "side_effects_performed": False},
+                )
+            quality = item.get("quality", "")
+            if not isinstance(quality, str) or len(quality) > 64:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    f"assets[{index}].quality must be a string of at most 64 characters",
+                    {"asset_id": asset_id, "side_effects_performed": False},
+                )
+            normalized_assets.append(
+                {
+                    "asset_id": asset_id,
+                    "expected_price": expected_price,
+                    "free_listing": True,
+                    "format": asset_format,
+                    "quality": quality.strip(),
+                }
+            )
+
+        project: Optional[Path] = None
+        if project_path is not None:
+            try:
+                project = resolve_allowed_project(project_path, root)
+            except (TypeError, OSError, ValueError) as exc:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    str(exc),
+                    {"field": "project_path", "side_effects_performed": False},
+                )
+        if mode == "library_download_and_project" and project is None:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "project_path is required for library_download_and_project mode",
+                {"mode": mode, "side_effects_performed": False},
+            )
+        if mode != "library_download_and_project" and project is not None:
+            # A supplied project is safe, but only the project mode may import
+            # into it. This avoids an ambiguous provider-side interpretation.
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "project_path is only valid with library_download_and_project mode",
+                {"mode": mode, "side_effects_performed": False},
+            )
+
+        launcher_payload: Optional[Dict[str, Any]] = None
+        binding_values = (launcher_pid, launcher_hwnd, launcher_executable)
+        if any(value is not None for value in binding_values):
+            if not all(value is not None for value in binding_values):
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "launcher_pid, launcher_hwnd, and launcher_executable must "
+                    "be provided together",
+                    {"side_effects_performed": False},
+                )
+            try:
+                pid = int(launcher_pid)  # type: ignore[arg-type]
+                hwnd = int(launcher_hwnd)  # type: ignore[arg-type]
+            except (TypeError, ValueError, OverflowError):
+                pid = hwnd = 0
+            if (
+                isinstance(launcher_pid, bool)
+                or isinstance(launcher_hwnd, bool)
+                or pid <= 0
+                or hwnd <= 0
+            ):
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "launcher_pid and launcher_hwnd must be positive",
+                    {"side_effects_performed": False},
+                )
+            try:
+                executable = Path(launcher_executable).expanduser().resolve()
+            except (TypeError, OSError, ValueError) as exc:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    f"launcher_executable is invalid: {exc}",
+                    {"side_effects_performed": False},
+                )
+            if not executable.is_absolute() or not executable.is_file():
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "launcher_executable must be an existing absolute file",
+                    {"side_effects_performed": False},
+                )
+            if not isinstance(launcher_version, str) or len(launcher_version) > 64:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "launcher_version must be a string of at most 64 characters",
+                    {"side_effects_performed": False},
+                )
+            binding = LauncherBinding(
+                pid, hwnd, executable, launcher_version.strip()
+            )
+            try:
+                status = bind_launcher(binding).status()
+            except (OSError, ValueError, psutil.Error) as exc:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    f"Launcher binding failed: {exc}",
+                    {"binding": binding.as_dict(), "side_effects_performed": False},
+                )
+            actual = status.get("actual_executable")
+            if not actual or Path(str(actual)).expanduser().resolve() != executable:
+                return OperationResult(
+                    CapabilityState.UNAVAILABLE,
+                    operation,
+                    "Launcher executable does not match the exact bound process",
+                    {
+                        "expected_executable": str(executable),
+                        "actual_executable": actual,
+                        "side_effects_performed": False,
+                    },
+                )
+            launcher_payload = {
+                "pid": pid,
+                "hwnd": hwnd,
+                "executable": str(executable),
+                "version": launcher_version.strip(),
+                "status": status,
+            }
+
+        payload: Dict[str, Any] = {
+            "assets": normalized_assets,
+            "allowed_root": str(root),
+            "mode": mode,
+            "free_only": True,
+            "provider_route": "official_fab_or_native_hook",
+            "cua_calls_expected": 0,
+            "idempotency_key": "asset_id",
+            "execution_contract": [
+                "verify the current official listing is free before each account mutation",
+                "add each asset to My Library exactly once",
+            ],
+        }
+        if mode != "library_only":
+            payload["execution_contract"].extend(
+                [
+                    "download the requested compatible format only after ownership is confirmed",
+                    "re-read download status for every asset before completion",
+                ]
+            )
+        if project is not None:
+            payload["project_path"] = str(project)
+            payload["execution_contract"].append(
+                "import UE-native content into the scoped project and re-read its inventory"
+            )
+        if launcher_payload is not None:
+            payload["launcher"] = launcher_payload
+        for field, values in (("database_paths", database_paths), ("cache_roots", cache_roots)):
+            if values:
+                if isinstance(values, (str, bytes)):
+                    return OperationResult(
+                        CapabilityState.UNAVAILABLE,
+                        operation,
+                        f"{field} must be a list of paths",
+                        {"side_effects_performed": False},
+                    )
+                scoped: list[str] = []
+                try:
+                    for value in values:
+                        scoped.append(str(resolve_allowed_project(value, root)))
+                except (TypeError, ValueError) as exc:
+                    return OperationResult(
+                        CapabilityState.UNAVAILABLE,
+                        operation,
+                        str(exc),
+                        {"field": field, "side_effects_performed": False},
+                    )
+                if len(scoped) > 32:
+                    return OperationResult(
+                        CapabilityState.UNAVAILABLE,
+                        operation,
+                        f"{field} is limited to 32 paths",
+                        {"count": len(scoped), "side_effects_performed": False},
+                    )
+                payload[field] = scoped
+
+        verification = {
+            "library": "fab.library_sources.request",
+        }
+        if mode != "library_only":
+            verification["downloads"] = "fab.download_status_batch.request"
+        if project is not None:
+            verification["project"] = "fab.import_inventory.request"
+        payload["verification_required"] = verification
+        next_operations = [verification["library"]]
+        if "downloads" in verification:
+            next_operations.append(verification["downloads"])
+        if "project" in verification:
+            next_operations.append(verification["project"])
+        plan_details: Dict[str, Any] = {
+            "asset_count": len(normalized_assets),
+            "mode": mode,
+            "allowed_root": str(root),
+            "provider_route": payload["provider_route"],
+            "cua_calls_expected": 0,
+            "next_verification_operations": next_operations,
+            "side_effects_performed": False,
+        }
+        if project is not None:
+            plan_details["project_path"] = str(project)
+        return self._typed_hook_request(
+            operation,
+            hook_manifest,
+            payload,
+            confirmed=confirmed,
+            dry_run=dry_run,
+            plan=OperationResult(
+                CapabilityState.READ_ONLY,
+                "fab.free_assets_sync",
+                "one scoped native/provider workflow replaces per-asset CUA "
+                "actions; execution remains confirmation-gated",
+                plan_details,
             ),
         )
 

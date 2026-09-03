@@ -90,6 +90,41 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fab_library_sync.add_argument("--confirmed", action="store_true")
     fab_library_sync.add_argument("--execute", action="store_true")
+    fab_free_sync = sub.add_parser(
+        "fab-free-assets-sync-request",
+        help="Batch free Fab ownership, download, verification, and optional project import",
+    )
+    fab_free_sync.add_argument(
+        "assets_json", type=Path, help="JSON file containing an assets array"
+    )
+    fab_free_sync.add_argument("--allowed-root", required=True)
+    fab_free_sync.add_argument("--hook-manifest", required=True)
+    fab_free_sync.add_argument(
+        "--mode",
+        choices=["library_only", "library_and_download", "library_download_and_project"],
+        default="library_and_download",
+    )
+    fab_free_sync.add_argument("--project-path", default=None)
+    fab_free_sync.add_argument("--launcher-pid", type=int, default=None)
+    fab_free_sync.add_argument("--launcher-hwnd", type=int, default=None)
+    fab_free_sync.add_argument("--launcher-executable", type=Path, default=None)
+    fab_free_sync.add_argument("--launcher-version", default="")
+    fab_free_sync.add_argument(
+        "--database",
+        dest="databases",
+        action="append",
+        default=None,
+        help="Approved listings_v1.db path; repeat for multiple indexes",
+    )
+    fab_free_sync.add_argument(
+        "--cache-root",
+        dest="cache_roots",
+        action="append",
+        default=None,
+        help="Approved VaultCache root; repeat for multiple locations",
+    )
+    fab_free_sync.add_argument("--confirmed", action="store_true")
+    fab_free_sync.add_argument("--execute", action="store_true")
     fab_sources = sub.add_parser("fab-library-sources")
     fab_sources.add_argument(
         "--database",
@@ -338,6 +373,18 @@ def build_parser() -> argparse.ArgumentParser:
     fab_search_request.add_argument("--max-depth", type=int, default=6)
     fab_search_request.add_argument("--confirmed", action="store_true")
     fab_search_request.add_argument("--execute", action="store_true")
+    fab_catalog_free = sub.add_parser(
+        "fab-catalog-free-request",
+        help="Read the current free Fab catalog through an official/native hook",
+    )
+    fab_catalog_free.add_argument("query", nargs="?", default="")
+    fab_catalog_free.add_argument("--hook-manifest", required=True)
+    fab_catalog_free.add_argument("--category", dest="categories", action="append", default=None)
+    fab_catalog_free.add_argument("--format", dest="formats", action="append", default=None)
+    fab_catalog_free.add_argument("--limit", type=int, default=100)
+    fab_catalog_free.add_argument("--cursor", default="")
+    fab_catalog_free.add_argument("--confirmed", action="store_true")
+    fab_catalog_free.add_argument("--execute", action="store_true")
     fab_download_status = sub.add_parser("fab-download-status")
     fab_download_status.add_argument("asset_id")
     fab_download_status.add_argument("--database", default=None)
@@ -565,6 +612,34 @@ def main(argv: Optional[List[str]] = None) -> int:
                 dry_run=not args.execute,
             ).as_dict()
         )
+    elif args.command == "fab-free-assets-sync-request":
+        try:
+            assets_data = json.loads(args.assets_json.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError) as exc:
+            raise SystemExit(f"assets_json must be a readable JSON file: {exc}") from exc
+        if isinstance(assets_data, dict):
+            assets_data = assets_data.get("assets")
+        if not isinstance(assets_data, list):
+            raise SystemExit(
+                "assets_json must contain a JSON array or an object with an assets array"
+            )
+        _dump(
+            service.fab_free_assets_sync_request(
+                assets_data,
+                args.allowed_root,
+                args.hook_manifest,
+                mode=args.mode,
+                project_path=args.project_path,
+                launcher_pid=args.launcher_pid,
+                launcher_hwnd=args.launcher_hwnd,
+                launcher_executable=args.launcher_executable,
+                launcher_version=args.launcher_version,
+                database_paths=args.databases,
+                cache_roots=args.cache_roots,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
     elif args.command == "fab-library-sources":
         _dump(
             service.fab.list_local_libraries(
@@ -754,6 +829,19 @@ def main(argv: Optional[List[str]] = None) -> int:
                 owned_only=args.owned_only,
                 downloaded_only=args.downloaded_only,
                 max_depth=args.max_depth,
+                confirmed=args.confirmed,
+                dry_run=not args.execute,
+            ).as_dict()
+        )
+    elif args.command == "fab-catalog-free-request":
+        _dump(
+            service.fab_catalog_free_request(
+                args.hook_manifest,
+                query=args.query,
+                categories=args.categories,
+                formats=args.formats,
+                limit=args.limit,
+                cursor=args.cursor,
                 confirmed=args.confirmed,
                 dry_run=not args.execute,
             ).as_dict()

@@ -14,10 +14,12 @@ Initial allowlist:
 - `engine.verify.request`
 - `engine.launch.request`
 - `fab.search.request`
+- `fab.catalog_free.request`
 - `fab.asset_detail.request`
 - `fab.library.request`
 - `fab.library_sources.request`
 - `fab.library_sync.request`
+- `fab.free_assets_sync.request`
 - `fab.download.request`
 - `fab.download_batch.request`
 - `fab.download_status.request`
@@ -41,6 +43,19 @@ probes and include a local read plan in the result, so a provider can add an
 online/native implementation without changing the caller-facing contract.
 Their `side_effects_performed` result is always false; mutating operations
 remain the only operations that can report a mutation.
+
+`fab.catalog_free.request` is the read-only online discovery boundary. A
+user-owned provider may use an official Fab API or native integration and must
+return current price, compatible formats, and ownership eligibility for each
+listing. The adapter never scrapes the storefront or stores credentials.
+
+`fab.free_assets_sync.request` is the CUA-minimizing batch boundary. It accepts
+up to 100 asset IDs with explicit zero-price/free-listing assertions and one of
+three modes: `library_only`, `library_and_download`, or
+`library_download_and_project`. The hook performs the official account/library
+and download work once, then returns per-asset job/evidence records. The
+payload advertises `cua_calls_expected: 0`; `launcher.action.request` is still
+available only as a bounded dcc-cua fallback for custom-rendered surfaces.
 
 The adapter also implements cached import locally. This path is intentionally
 separate from the native bridge: it reads Epic's local library index, requires
@@ -101,6 +116,12 @@ USD remain available through the batch/export operations.
 operation names, required identity fields, mutation flags, and confirmation
 defaults. Hook authors should consume that contract instead of depending on
 private Epic Launcher/Fab implementation details.
+
+No C++/C# reflection shim is required for these interfaces. The stable boundary
+is the versioned JSON `epic.hook.v1` protocol over a user-owned executable;
+Python, Rust, or another language can implement the provider. A native UE
+plugin is only needed when the provider itself must call editor internals, and
+is separate from the Epic Launcher account boundary.
 
 ## Self-owned hook bridge
 

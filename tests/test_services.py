@@ -496,6 +496,15 @@ def test_hook_contract_describes_mutation_and_required_fields():
     assert operations["fab.download_status_batch.request"]["mutating"] is False
     assert operations["fab.download_status_batch.request"]["required_fields"] == ["assets"]
     assert operations["fab.library_sources.request"]["mutating"] is False
+    assert operations["fab.catalog_free.request"]["mutating"] is False
+    assert operations["fab.catalog_free.request"]["required_fields"] == ["free_only", "limit"]
+    assert operations["fab.free_assets_sync.request"]["mutating"] is True
+    assert operations["fab.free_assets_sync.request"]["required_fields"] == [
+        "assets",
+        "allowed_root",
+        "mode",
+        "free_only",
+    ]
     assert operations["launcher.action.request"]["mutating"] is True
     assert operations["launcher.action.request"]["required_fields"] == [
         "launcher_pid",
@@ -673,6 +682,99 @@ def test_typed_fab_library_sync_scopes_paths_and_is_dry_run(tmp_path):
         tmp_path,
         manifest,
         cache_roots=[tmp_path.parent],
+        confirmed=True,
+    )
+    assert outside.state is CapabilityState.UNAVAILABLE
+    assert "outside allowed root" in outside.message
+
+
+def test_read_only_free_catalog_request_is_cua_free(tmp_path):
+    manifest = _hook_manifest(tmp_path, ["fab.catalog_free.request"])
+    result = EpicService().fab_catalog_free_request(
+        manifest,
+        query="environment",
+        categories=["Environment", "environment"],
+        formats=["unreal-engine"],
+        limit=20,
+        confirmed=True,
+    )
+    assert result.state is CapabilityState.READ_ONLY
+    assert result.operation == "fab.catalog_free.request"
+    assert result.details["payload"]["free_only"] is True
+    assert result.details["payload"]["categories"] == ["Environment"]
+    assert result.details["plan"]["details"]["cua_calls_expected"] == 0
+    assert result.details["side_effects_performed"] is False
+
+
+def test_free_assets_sync_is_bounded_scoped_and_cua_free(tmp_path):
+    manifest = _hook_manifest(tmp_path, ["fab.free_assets_sync.request"])
+    project = tmp_path / "RiftKidsARPG"
+    project.mkdir()
+    database = tmp_path / "VaultCache" / "FabLibrary" / "listings_v1.db"
+    cache = tmp_path / "VaultCache"
+    result = EpicService().fab_free_assets_sync_request(
+        [
+            {
+                "asset_id": "asset-1",
+                "expected_price": 0,
+                "free_listing": True,
+                "format": "unreal-engine",
+            },
+            {
+                "asset_id": "asset-2",
+                "expected_price": 0,
+                "free_listing": True,
+                "format": "fbx",
+                "quality": "high",
+            },
+        ],
+        tmp_path,
+        manifest,
+        mode="library_download_and_project",
+        project_path=project,
+        database_paths=[database],
+        cache_roots=[cache],
+        confirmed=True,
+    )
+    assert result.state is CapabilityState.READ_ONLY
+    assert result.operation == "fab.free_assets_sync.request"
+    payload = result.details["payload"]
+    assert payload["free_only"] is True
+    assert payload["cua_calls_expected"] == 0
+    assert payload["project_path"] == str(project.resolve())
+    assert payload["database_paths"] == [str(database.resolve())]
+    assert payload["verification_required"]["downloads"] == "fab.download_status_batch.request"
+    assert payload["verification_required"]["project"] == "fab.import_inventory.request"
+    assert result.details["side_effects_performed"] is False
+
+
+def test_free_assets_sync_requires_free_assertion_and_project_mode_scope(tmp_path):
+    manifest = _hook_manifest(tmp_path, ["fab.free_assets_sync.request"])
+    not_free = EpicService().fab_free_assets_sync_request(
+        [{"asset_id": "asset-1", "expected_price": 1, "free_listing": True}],
+        tmp_path,
+        manifest,
+        confirmed=True,
+    )
+    assert not_free.state is CapabilityState.HUMAN_REQUIRED
+    assert "non-zero" in not_free.message
+
+    missing_project = EpicService().fab_free_assets_sync_request(
+        [{"asset_id": "asset-1", "expected_price": 0, "free_listing": True}],
+        tmp_path,
+        manifest,
+        mode="library_download_and_project",
+        confirmed=True,
+    )
+    assert missing_project.state is CapabilityState.UNAVAILABLE
+    assert "project_path" in missing_project.message
+
+    outside = EpicService().fab_free_assets_sync_request(
+        [{"asset_id": "asset-1", "expected_price": 0, "free_listing": True}],
+        tmp_path,
+        manifest,
+        mode="library_download_and_project",
+        project_path=tmp_path.parent / "outside",
         confirmed=True,
     )
     assert outside.state is CapabilityState.UNAVAILABLE

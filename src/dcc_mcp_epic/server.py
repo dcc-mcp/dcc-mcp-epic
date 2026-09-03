@@ -269,6 +269,30 @@ def epic_fab_search_request(
     ).as_dict()
 
 
+def epic_fab_catalog_free_request(
+    hook_manifest: str,
+    query: str = "",
+    categories: Optional[List[str]] = None,
+    formats: Optional[List[str]] = None,
+    limit: int = 100,
+    cursor: str = "",
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Route a current free Fab catalog lookup through a provider hook."""
+
+    return _service.fab_catalog_free_request(
+        hook_manifest,
+        query=query,
+        categories=categories,
+        formats=formats,
+        limit=limit,
+        cursor=cursor,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
 def epic_fab_asset_detail_request(
     asset_id: str,
     hook_manifest: str,
@@ -408,6 +432,40 @@ def epic_fab_library_sync_request(
         launcher_pid,
         allowed_root,
         hook_manifest,
+        database_paths=database_paths,
+        cache_roots=cache_roots,
+        confirmed=confirmed,
+        dry_run=dry_run,
+    ).as_dict()
+
+
+def epic_fab_free_assets_sync_request(
+    assets: List[Dict[str, Any]],
+    allowed_root: str,
+    hook_manifest: str,
+    mode: str = "library_and_download",
+    project_path: Optional[str] = None,
+    launcher_pid: Optional[int] = None,
+    launcher_hwnd: Optional[int] = None,
+    launcher_executable: Optional[str] = None,
+    launcher_version: str = "",
+    database_paths: Optional[List[str]] = None,
+    cache_roots: Optional[List[str]] = None,
+    confirmed: bool = False,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch one scoped free-asset library/download/import workflow."""
+
+    return _service.fab_free_assets_sync_request(
+        assets,
+        allowed_root,
+        hook_manifest,
+        mode=mode,
+        project_path=project_path,
+        launcher_pid=launcher_pid,
+        launcher_hwnd=launcher_hwnd,
+        launcher_executable=launcher_executable,
+        launcher_version=launcher_version,
         database_paths=database_paths,
         cache_roots=cache_roots,
         confirmed=confirmed,
@@ -923,9 +981,11 @@ if FastMCP is not None:
         epic_fab_library_sources,
         epic_fab_library_sources_request,
         epic_fab_asset_detail_request,
+        epic_fab_catalog_free_request,
         epic_fab_add_to_library_request,
         epic_fab_add_to_library_batch_request,
         epic_fab_library_sync_request,
+        epic_fab_free_assets_sync_request,
         epic_fab_asset_inspect,
         epic_fab_search,
         epic_fab_search_request,

@@ -65,6 +65,7 @@ class FabService:
         return {
             "search": CapabilityState.READ_ONLY.value,
             "search_request": "available_if_declared_read_only_hook",
+            "catalog_free_request": "available_if_declared_read_only_hook",
             "asset_detail": CapabilityState.READ_ONLY.value,
             "asset_detail_request": "available_if_declared_read_only_hook",
             "library": CapabilityState.READ_ONLY.value,
@@ -72,6 +73,7 @@ class FabService:
             "library_sources": CapabilityState.READ_ONLY.value,
             "library_sources_request": "available_if_declared_read_only_hook",
             "library_sync_request": "available_if_declared_scoped_hook",
+            "free_assets_sync_request": "available_if_declared_scoped_hook",
             "add_to_library": "available_if_declared_free_hook",
             "add_to_library_batch": "available_if_declared_free_hook",
             "download": "available_if_declared_owned_hook",

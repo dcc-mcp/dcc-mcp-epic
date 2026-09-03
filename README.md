@@ -19,6 +19,8 @@ no generic UI automation fallback.
 - Fab search: read-only local index search. Fab download/export are available
   only through a declared user-owned hook; the adapter never automates login,
   CAPTCHA, 2FA, purchase, or license acceptance.
+- Free Fab catalog: available through a read-only official/native provider hook;
+  the adapter does not scrape the storefront or handle credentials.
 - Local Fab library index: available, read-only, when Epic's `listings_v1.db`
   exists.
 - Multi-source Fab inventory: available, read-only, merges explicitly selected
@@ -29,6 +31,11 @@ no generic UI automation fallback.
 - Fab library sync: available through a scoped user-owned hook keyed to the
   Launcher PID and approved cache/index roots; the adapter never edits Epic's
   databases directly.
+- Free asset sync: one confirmation-gated, bounded workflow can add up to 100
+  explicitly-free listings to My Library, download compatible formats, verify
+  local state, and optionally import into a scoped UE project. It advertises
+  `cua_calls_expected: 0`; the provider hook performs native/API work and
+  returns per-asset evidence.
 - Fab asset detail: read-only listing metadata plus cache evidence for one
   asset, available through a typed hook.
 - Fab download status: available, read-only, re-reads ownership, path and
@@ -68,6 +75,9 @@ no generic UI automation fallback.
   callback listener probe are available as typed `*_request` MCP tools and CLI
   commands. Each
   request includes the local evidence plan and reports no mutation.
+- CUA minimization: prefer `fab.catalog_free.request` for discovery and
+  `fab.free_assets_sync.request` for a single provider job. `launcher.action`
+  remains a bounded dcc-cua fallback for custom-rendered UI only.
 - Runtime selection: `runtime-doctor` prefers a verified DCC-MCP sidecar when a
   compatible Python/MCP environment exists and otherwise selects the shared
   PyOxidizer bundle. Unreal's embedded Python is never reused.
@@ -133,6 +143,13 @@ uv run dcc-mcp-epic-cli fab-add-to-library-batch-request `
   --free-listing --launcher-pid <EpicLauncherPID> `
   --launcher-hwnd <EpicLauncherHWND> `
   --launcher-executable C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe
+uv run dcc-mcp-epic-cli fab-catalog-free-request "environment" `
+  --hook-manifest C:\path\hook.json --category Environment `
+  --format unreal-engine --limit 20
+uv run dcc-mcp-epic-cli fab-free-assets-sync-request C:\path\free-assets.json `
+  --allowed-root P:\game-test\ue-arpg --hook-manifest C:\path\hook.json `
+  --mode library_download_and_project `
+  --project-path P:\game-test\ue-arpg
 uv run dcc-mcp-epic-cli fab-library-sync-request `
   --launcher-pid <EpicLauncherPID> --allowed-root F:\UE `
   --hook-manifest C:\path\hook.json `
