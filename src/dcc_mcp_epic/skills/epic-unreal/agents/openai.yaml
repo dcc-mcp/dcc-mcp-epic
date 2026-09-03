@@ -1,0 +1,4 @@
+interface:
+  display_name: "Epic Unreal"
+  short_description: "Verify UE projects and prepare typed launch plans"
+  default_prompt: "Use $epic-unreal to verify the UE project and prepare a launch plan."

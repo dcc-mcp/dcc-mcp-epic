@@ -150,6 +150,36 @@ def test_worker_delegates_mutation_to_explicit_provider(tmp_path, monkeypatch):
     assert response["details"]["side_effects_performed"] is True
 
 
+def test_worker_dry_run_never_delegates_mutation(tmp_path, monkeypatch):
+    marker = tmp_path / "provider-called"
+    provider = tmp_path / "provider.py"
+    provider.write_text(
+        "import pathlib; pathlib.Path(%r).write_text('called')" % str(marker),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(
+        "DCC_MCP_EPIC_FAB_PROVIDER_COMMAND",
+        json.dumps([sys.executable, str(provider)]),
+    )
+    response = FabWorker().handle(
+        {
+            "protocol": HOOK_PROTOCOL,
+            "operation": "fab.download.request",
+            "payload": {
+                "asset_id": "free-vfx",
+                "project_path": str(tmp_path),
+                "format": "unreal-engine",
+                "dry_run": True,
+            },
+        }
+    )
+
+    assert response["state"] == CapabilityState.READ_ONLY.value
+    assert response["details"]["code"] == "dry_run"
+    assert response["details"]["side_effects_performed"] is False
+    assert not marker.exists()
+
+
 def test_worker_completes_idempotent_sync_from_local_evidence(tmp_path, monkeypatch):
     worker = FabWorker()
     monkeypatch.setattr(

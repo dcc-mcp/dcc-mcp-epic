@@ -1,0 +1,273 @@
+tools:
+  - name: preflight_launcher
+    description: "Check dcc-cua readiness and exact Epic Launcher PID/HWND without sending input."
+    source_file: scripts/preflight_launcher.py
+    execution: sync
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 30
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [pid, hwnd, executable]
+      properties:
+        pid:
+          type: integer
+          minimum: 1
+          description: "Exact Epic Games Launcher process ID from fresh discovery."
+        hwnd:
+          type: integer
+          minimum: 1
+          description: "Exact Epic Games Launcher window handle from fresh discovery."
+        executable:
+          type: string
+          minLength: 1
+          description: "Absolute executable path bound to the PID."
+        cua_path:
+          type: string
+          minLength: 1
+          description: "Optional absolute official dcc-cua executable path."
+        timeout_seconds:
+          type: integer
+          minimum: 1
+          maximum: 60
+          default: 10
+          description: "Per-check timeout in seconds."
+    output_schema:
+      type: object
+      additionalProperties: true
+      required: [success, message, context]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+    next-tools:
+      on-success: []
+      on-failure: []
+
+  - name: library_sources
+    description: "Read and merge local Epic Fab indexes below approved search roots."
+    source_file: scripts/library_sources.py
+    execution: sync
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        database_paths:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          description: "Optional explicit listings_v1.db paths."
+        search_roots:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          description: "Approved roots to scan for listings_v1.db."
+        max_depth:
+          type: integer
+          minimum: 0
+          maximum: 12
+          default: 6
+          description: "Maximum scan depth below each search root."
+    output_schema:
+      type: object
+      additionalProperties: true
+      required: [success, message, context]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+    call_examples:
+      - arguments:
+          search_roots: ["C:/ProgramData/Epic", "F:/UE/EpicGamesLauncher"]
+          max_depth: 6
+        note: "Merge local Epic Fab indexes from the two approved cache roots."
+
+  - name: search_library
+    description: "Search the merged local Fab library by title, id, category, or format."
+    source_file: scripts/search_library.py
+    execution: sync
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query:
+          type: string
+          description: "Asset title, Fab id, category, or empty string for all entries."
+        category:
+          type: string
+          default: ""
+        formats:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        owned_only:
+          type: boolean
+          default: false
+        downloaded_only:
+          type: boolean
+          default: false
+        database_paths:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        search_roots:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        max_depth:
+          type: integer
+          minimum: 0
+          maximum: 12
+          default: 6
+    output_schema:
+      type: object
+      additionalProperties: true
+      required: [success, message, context]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+    call_examples:
+      - arguments:
+          query: "environment"
+          owned_only: true
+          downloaded_only: true
+        note: "Find already-owned, already-downloaded environment entries."
+
+  - name: free_assets_sync
+    description: "Plan or execute one bounded free Fab ownership/download sync through the official provider."
+    source_file: scripts/free_assets_sync.py
+    execution: async
+    job_strategy: isolated
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 300
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [assets, allowed_root, mode]
+      properties:
+        assets:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [asset_id, expected_price, free_listing]
+            properties:
+              asset_id:
+                type: string
+                minLength: 1
+              expected_price:
+                type: number
+              free_listing:
+                type: boolean
+              format:
+                type: string
+        allowed_root:
+          type: string
+          minLength: 1
+          description: "Approved root for project/cache evidence."
+        mode:
+          type: string
+          enum: [library_only, library_and_download, library_download_and_project]
+        project_path:
+          type: string
+          minLength: 1
+        free_only:
+          type: boolean
+          default: true
+        execute:
+          type: boolean
+          default: false
+          description: "False returns a dry-run/provider plan; true delegates the confirmed provider operation."
+        database_paths:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        search_roots:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        cache_roots:
+          type: array
+          items:
+            type: string
+            minLength: 1
+    output_schema:
+      type: object
+      additionalProperties: true
+      required: [success, message, context]
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: true
+    next-tools:
+      on-success: [project_inventory]
+      on-failure: [preflight_launcher, library_sources]
+    call_examples:
+      - arguments:
+          assets:
+            - asset_id: "free-vfx"
+              expected_price: 0
+              free_listing: true
+              format: "unreal-engine"
+          allowed_root: "P:/game-test/ue-arpg"
+          mode: "library_and_download"
+          execute: false
+        note: "Validate a free asset batch without performing account or download mutation."
+
+  - name: project_inventory
+    description: "Verify imported Fab provenance manifests and file hashes in a UE project."
+    source_file: scripts/project_inventory.py
+    execution: sync
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 120
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [project_path, allowed_root]
+      properties:
+        project_path:
+          type: string
+          minLength: 1
+        allowed_root:
+          type: string
+          minLength: 1
+        destination_subdir:
+          type: string
+          default: Fab
+    output_schema:
+      type: object
+      additionalProperties: true
+      required: [success, message, context]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+    next-tools:
+      on-success: []
+      on-failure: []

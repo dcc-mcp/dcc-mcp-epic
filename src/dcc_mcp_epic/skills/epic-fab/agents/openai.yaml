@@ -1,0 +1,4 @@
+interface:
+  display_name: "Epic Fab"
+  short_description: "Operate typed Fab library and free asset workflows"
+  default_prompt: "Use $epic-fab to inspect or synchronize Epic Fab assets."
