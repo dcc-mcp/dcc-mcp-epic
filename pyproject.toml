@@ -46,6 +46,16 @@ dcc-mcp-epic-fab-worker = "dcc_mcp_epic.providers.fab.worker:main"
 where = ["src"]
 include = ["dcc_mcp_epic*"]
 
+[tool.setuptools.package-data]
+dcc_mcp_epic = ["skills/**"]
+
+[tool.setuptools.exclude-package-data]
+dcc_mcp_epic = [
+    "skills/*/scripts/__pycache__/*",
+    "skills/*/scripts/*.pyc",
+    "skills/*/scripts/*.pyo",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

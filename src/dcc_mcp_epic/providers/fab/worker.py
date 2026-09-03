@@ -640,6 +640,23 @@ class FabWorker:
             preflight_code = preflight.get("details", {}).get("code")
             if preflight_code in {"invalid_assets", "project_scope_missing"}:
                 return preflight
+        if payload.get("dry_run") is True:
+            details = {
+                "code": "dry_run",
+                "provider_route": "official_fab_or_native_hook",
+                "cua_calls_expected": 0,
+                "payload": payload,
+                "side_effects_performed": False,
+                "next_action": "set execute=true only after reviewing this typed plan",
+            }
+            if preflight is not None:
+                details["preflight"] = preflight.get("details", {})
+            return _result(
+                operation,
+                CapabilityState.READ_ONLY,
+                "dry-run validated; no provider mutation was invoked",
+                details,
+            )
         delegated = self._delegate(request)
         if delegated is not None:
             return delegated

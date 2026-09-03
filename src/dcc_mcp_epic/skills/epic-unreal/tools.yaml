@@ -1,0 +1,101 @@
+tools:
+  - name: verify_project
+    description: "Verify a UE project file and its expected EngineAssociation."
+    source_file: scripts/verify_project.py
+    execution: sync
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 30
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [project_path]
+      properties:
+        project_path:
+          type: string
+          minLength: 1
+          description: "Absolute .uproject path or a directory containing exactly one .uproject."
+        expected_engine:
+          type: string
+          minLength: 1
+          default: "5.5"
+    output_schema:
+      type: object
+      additionalProperties: true
+      required: [success, message, context]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+    next-tools:
+      on-success: [list_installed_engines]
+      on-failure: []
+
+  - name: list_installed_engines
+    description: "Read installed Unreal Engine versions from Epic manifest files."
+    source_file: scripts/list_installed_engines.py
+    execution: sync
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 30
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        manifest_root:
+          type: string
+          minLength: 1
+          description: "Optional Epic Data/Manifests directory."
+    output_schema:
+      type: object
+      additionalProperties: true
+      required: [success, message, context]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+    next-tools:
+      on-success: [launch_plan]
+      on-failure: []
+
+  - name: launch_plan
+    description: "Create a read-only Unreal Editor launch plan for one project and engine version."
+    source_file: scripts/launch_plan.py
+    execution: sync
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 30
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [project_path]
+      properties:
+        target_version:
+          type: string
+          minLength: 1
+          default: "5.5"
+        project_path:
+          type: string
+          minLength: 1
+        manifest_root:
+          type: string
+          minLength: 1
+    output_schema:
+      type: object
+      additionalProperties: true
+      required: [success, message, context]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+    call_examples:
+      - arguments:
+          target_version: "5.5"
+          project_path: "P:/game-test/ue-arpg/RiftKidsARPG.uproject"
+        note: "Prepare a UE 5.5 launch plan without starting Unreal Editor."
+    next-tools:
+      on-success: []
+      on-failure: [verify_project, list_installed_engines]

@@ -86,6 +86,24 @@ no generic UI automation fallback.
   compatible Python/MCP environment exists and otherwise selects the shared
   PyOxidizer bundle. Unreal's embedded Python is never reused.
 
+## Bundled agent skills
+
+The adapter now ships two discoverable, progressive-loading skills under
+`src/dcc_mcp_epic/skills/`:
+
+- `$epic-fab` — exact-window `dcc-cua` preflight, local Fab index discovery and
+  search, bounded free-asset sync planning/execution, and project provenance
+  inventory.
+- `$epic-unreal` — UE project verification, installed-engine inventory, and a
+  read-only Unreal Editor launch plan.
+
+Their `SKILL.md`, `tools.yaml`, scripts, and OpenAI interface metadata are
+included in wheels and source distributions. Use `dcc-mcp-cli search` and
+`dcc-mcp-cli load-skill` to discover/load them when `dcc-mcp-core` is installed;
+the direct `dcc-mcp-epic` FastMCP tools remain available independently. Fab
+mutation tools default to `execute=false` and preserve the official-provider,
+human-authentication boundary.
+
 ## Built-in Fab worker
 
 The package includes a language-neutral `epic.hook.v1` worker. It performs
