@@ -40,6 +40,7 @@ dev = [
 [project.scripts]
 dcc-mcp-epic = "dcc_mcp_epic.server:main"
 dcc-mcp-epic-cli = "dcc_mcp_epic.cli:main"
+dcc-mcp-epic-fab-worker = "dcc_mcp_epic.providers.fab.worker:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

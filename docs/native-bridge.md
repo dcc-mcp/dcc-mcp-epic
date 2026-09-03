@@ -123,6 +123,23 @@ Python, Rust, or another language can implement the provider. A native UE
 plugin is only needed when the provider itself must call editor internals, and
 is separate from the Epic Launcher account boundary.
 
+The repository ships `dcc-mcp-epic-fab-worker` as a reference worker. Generate
+its manifest with `dcc-mcp-epic-cli fab-worker-manifest`. The worker handles
+local index, cache, callback-listener, and project-inventory reads directly and
+returns typed `capability_unavailable` responses for account/download writes
+unless `DCC_MCP_EPIC_FAB_PROVIDER_COMMAND` names an explicit user-owned
+official/native provider. This is the supported way to grow the operation
+surface while keeping CUA at zero for batch provider jobs. The reference
+worker does not read credentials, automate login/CAPTCHA/2FA, edit Epic's
+SQLite databases, or reverse engineer Launcher memory.
+
+Epic's public UE Fab module does expose an optional C++ download primitive
+(`FFabDownloadRequest`/`EFabDownloadType`). It is useful inside a UE plugin once
+an authorized download URL and target location are already available, but it
+does not replace the signed-in Fab acquisition/EULA step or provide a supported
+Epic Launcher account API. Keep that native code behind the same worker
+contract rather than making agents reflect private Launcher windows.
+
 ## Self-owned hook bridge
 
 For capabilities not exposed by the Launcher, a user-owned bridge can register

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import List, Optional
 
@@ -29,6 +30,17 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("capabilities")
     sub.add_parser("runtime-doctor")
     sub.add_parser("hook-contract")
+    worker_manifest = sub.add_parser(
+        "fab-worker-manifest",
+        help="Print or save a manifest for the built-in Fab provider worker",
+    )
+    worker_manifest.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the manifest JSON to this path instead of stdout",
+    )
+    worker_manifest.add_argument("--timeout-seconds", type=int, default=120)
     engines = sub.add_parser("engines")
     engines.add_argument("--manifest-root", default=None)
     engine_verify = sub.add_parser("engine-verify")
@@ -539,6 +551,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "fab-worker-manifest":
+        from .providers.fab.worker import manifest
+
+        value = manifest(python_executable=sys.executable, timeout_seconds=args.timeout_seconds)
+        encoded = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+        if args.output is None:
+            print(encoded, end="")
+        else:
+            output = args.output.expanduser().resolve()
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(encoded, encoding="utf-8")
+            print(str(output))
+        return 0
     service = EpicService()
     if args.command == "capabilities":
         _dump(service.capabilities())

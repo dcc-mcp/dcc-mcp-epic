@@ -322,16 +322,45 @@ def invoke_hook(
             "hook returned invalid JSON",
             {"hook": spec.name, "side_effects_performed": False},
         )
-    # The operation allowlist is also a side-effect contract.  A hook may
-    # still perform its own internal bookkeeping, but read-only operations
-    # must never be reported as adapter-side mutations.  This keeps callers'
-    # completion gates honest and lets typed read-only requests share the same
-    # bridge as mutating requests.
-    side_effects_performed = operation in MUTATING_HOOK_OPERATIONS
+    # A provider may return a typed state.  Older hooks returned an arbitrary
+    # JSON object, so absence of ``state`` intentionally keeps the historical
+    # AVAILABLE behaviour for compatibility.  New workers can therefore report
+    # capability_unavailable/human_required without pretending that an account
+    # operation succeeded.
+    response_state = response.get("state") if isinstance(response, dict) else None
+    if response_state is None:
+        state = CapabilityState.AVAILABLE
+    else:
+        try:
+            state = CapabilityState(str(response_state))
+        except ValueError:
+            return OperationResult(
+                CapabilityState.UNAVAILABLE,
+                operation,
+                "hook returned an unsupported capability state",
+                {
+                    "hook": spec.name,
+                    "response": response,
+                    "side_effects_performed": False,
+                },
+            )
+    response_details = response.get("details") if isinstance(response, dict) else None
+    if isinstance(response_details, dict) and "side_effects_performed" in response_details:
+        side_effects_performed = bool(response_details["side_effects_performed"])
+    else:
+        # The operation allowlist remains the compatibility fallback for old
+        # hooks.  Typed workers must report their own evidence explicitly.
+        side_effects_performed = operation in MUTATING_HOOK_OPERATIONS
+    if operation not in MUTATING_HOOK_OPERATIONS:
+        side_effects_performed = False
+    if state is not CapabilityState.AVAILABLE:
+        side_effects_performed = False
     return OperationResult(
-        CapabilityState.AVAILABLE,
+        state,
         operation,
-        "hook operation completed",
+        str(response.get("message") or "hook operation completed")
+        if isinstance(response, dict)
+        else "hook operation completed",
         {
             "hook": spec.name,
             "response": response,

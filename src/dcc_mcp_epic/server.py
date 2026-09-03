@@ -18,6 +18,7 @@ from .providers.fab.bridge import (
     probe_fab_status_listener,
     send_import_request,
 )
+from .providers.fab.worker import manifest as fab_worker_manifest
 from .runtime import runtime_doctor
 from .services import EpicService
 
@@ -40,6 +41,12 @@ def epic_hook_contract() -> Dict[str, Any]:
     """Describe the versioned self-owned hook interface."""
 
     return hook_contract()
+
+
+def epic_fab_worker_manifest(timeout_seconds: int = 120) -> Dict[str, Any]:
+    """Return a ready-to-register manifest for the built-in Fab worker."""
+
+    return fab_worker_manifest(timeout_seconds=timeout_seconds)
 
 
 def epic_engine_list_installed(manifest_root: str = None) -> Dict[str, Any]:
@@ -966,6 +973,7 @@ if FastMCP is not None:
         epic_capabilities,
         epic_runtime_doctor,
         epic_hook_contract,
+        epic_fab_worker_manifest,
         epic_engine_list_installed,
         epic_engine_update_plan,
         epic_engine_download_plan,

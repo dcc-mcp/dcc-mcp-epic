@@ -82,6 +82,30 @@ no generic UI automation fallback.
   compatible Python/MCP environment exists and otherwise selects the shared
   PyOxidizer bundle. Unreal's embedded Python is never reused.
 
+## Built-in Fab worker
+
+The package includes a language-neutral `epic.hook.v1` worker. It performs
+local Fab/library/status/inventory reads without UI automation and returns a
+typed `capability_unavailable` result for account/download mutations until a
+user-owned official/native provider is configured. This keeps completion claims
+honest while avoiding CUA loops and private Launcher hooks.
+
+Generate a manifest using the same Python runtime that will execute the
+adapter:
+
+```powershell
+uv run dcc-mcp-epic-cli fab-worker-manifest --output .\fab-worker.json
+uv run dcc-mcp-epic-cli hook-probe .\fab-worker.json
+```
+
+To delegate account/library/download operations, set
+`DCC_MCP_EPIC_FAB_PROVIDER_COMMAND` to a JSON array whose first item is an
+existing absolute executable. The provider receives the same fixed stdin
+request and must return `epic.hook.v1` JSON with a typed state and per-asset
+evidence. `DCC_MCP_EPIC_FAB_CATALOG_JSON` may point to a caller-maintained
+catalog snapshot for offline free-catalog filtering; snapshot entries must
+explicitly carry `price: 0` and `free_listing: true`.
+
 ## Local build and tests
 
 ```powershell
