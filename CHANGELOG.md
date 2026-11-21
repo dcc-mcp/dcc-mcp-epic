@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.3](https://github.com/dcc-mcp/dcc-mcp-epic/compare/v0.2.2...v0.2.3) (2026-11-21)
+
+
+### Documentation
+
+* refresh the generated DCC-MCP host matrix pointer ([0a8374a](https://github.com/dcc-mcp/dcc-mcp-epic/commit/0a8374aae1de3ff6304407eb66d3490d6e5dcdd6))
+* refresh the generated DCC-MCP host matrix pointer ([11fc22f](https://github.com/dcc-mcp/dcc-mcp-epic/commit/11fc22fc87f02ccb946a672a7e88b866ae348092))
+
 ## [0.2.2](https://github.com/dcc-mcp/dcc-mcp-epic/compare/v0.2.1...v0.2.2) (2026-10-16)
 
 
